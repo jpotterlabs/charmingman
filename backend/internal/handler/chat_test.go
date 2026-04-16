@@ -49,7 +49,7 @@ func TestHandleChat_ProviderNotRegistered(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 	var resp ChatResponse
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.Contains(t, resp.Error, "provider nonexistent not registered")

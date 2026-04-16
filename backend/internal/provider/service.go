@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/anthropic"
@@ -57,6 +58,10 @@ func (s *ProviderService) Chat(ctx context.Context, providerName, modelName, pro
 	if !ok {
 		return nil, fmt.Errorf("provider %s not registered", providerName)
 	}
+
+	// Set 30s timeout for model calls
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 
 	model, err := p.LanguageModel(ctx, modelName)
 	if err != nil {

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"charmingman/backend/internal/provider"
 	"charm.land/fantasy"
@@ -39,7 +40,11 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 
 	res, err := h.providerService.Chat(c.Request.Context(), req.Provider, req.Model, req.Prompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ChatResponse{Error: err.Error()})
+		if strings.Contains(err.Error(), "not registered") {
+			c.JSON(http.StatusBadRequest, ChatResponse{Error: err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, ChatResponse{Error: err.Error()})
+		}
 		return
 	}
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
 
 	"charmingman/backend/internal/handler"
@@ -60,15 +61,19 @@ func main() {
 	// Setup Gin router
 	r := gin.Default()
 
-	// Unified API Key Middleware (Placeholder)
+	// Unified API Key Middleware
 	r.Use(func(c *gin.Context) {
+		gatewayKey := os.Getenv("GATEWAY_API_KEY")
+		if gatewayKey == "" {
+			c.Next()
+			return
+		}
+
 		apiKey := c.GetHeader("X-Charming-Key")
-		if apiKey == "" && os.Getenv("GATEWAY_API_KEY") != "" {
-			if apiKey != os.Getenv("GATEWAY_API_KEY") {
-				c.JSON(401, gin.H{"error": "Unauthorized"})
-				c.Abort()
-				return
-			}
+		if apiKey != gatewayKey {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			c.Abort()
+			return
 		}
 		c.Next()
 	})
