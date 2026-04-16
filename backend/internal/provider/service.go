@@ -52,22 +52,22 @@ func (s *ProviderService) RegisterLocal(name, baseURL string) error {
 	return nil
 }
 
-func (s *ProviderService) Chat(ctx context.Context, providerName, modelName, prompt string) (string, error) {
+func (s *ProviderService) Chat(ctx context.Context, providerName, modelName, prompt string) (*fantasy.Response, error) {
 	p, ok := s.providers[providerName]
 	if !ok {
-		return "", fmt.Errorf("provider %s not registered", providerName)
+		return nil, fmt.Errorf("provider %s not registered", providerName)
 	}
 
 	model, err := p.LanguageModel(ctx, modelName)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	agent := fantasy.NewAgent(model)
 	result, err := agent.Generate(ctx, fantasy.AgentCall{Prompt: prompt})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return result.Response.Content.Text(), nil
+	return &result.Response, nil
 }

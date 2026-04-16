@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"charmingman/backend/internal/provider"
+	"charm.land/fantasy"
 	"github.com/gin-gonic/gin"
 )
 
@@ -14,8 +15,9 @@ type ChatRequest struct {
 }
 
 type ChatResponse struct {
-	Response string `json:"response"`
-	Error    string `json:"error,omitempty"`
+	Response string        `json:"response"`
+	Usage    fantasy.Usage `json:"usage"`
+	Error    string        `json:"error,omitempty"`
 }
 
 type ChatHandler struct {
@@ -41,5 +43,8 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, ChatResponse{Response: res})
+	c.JSON(http.StatusOK, ChatResponse{
+		Response: res.Content.Text(),
+		Usage:    res.Usage,
+	})
 }
