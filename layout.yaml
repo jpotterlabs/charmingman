@@ -1,0 +1,23 @@
+name: "Default Workspace"
+windows:
+  - id: "chat1"
+    title: "GPT-4"
+    component: "chat"
+    x: 2
+    y: 2
+    width: 50
+    height: 15
+  - id: "chat2"
+    title: "Claude"
+    component: "chat"
+    x: 55
+    y: 2
+    width: 50
+    height: 15
+  - id: "thinklog"
+    title: "Thinking Log"
+    component: "log"
+    x: 2
+    y: 18
+    width: 103
+    height: 10
