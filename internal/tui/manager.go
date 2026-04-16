@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"slices"
-
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -12,6 +10,9 @@ type Manager struct {
 	Windows []*Window
 	Width   int
 	Height  int
+
+	LastMouseX int
+	LastMouseY int
 }
 
 // NewManager creates a new window manager.
@@ -24,6 +25,7 @@ func NewManager() *Manager {
 // AddWindow adds a new window to the manager.
 func (m *Manager) AddWindow(w *Window) {
 	m.Windows = append(m.Windows, w)
+	m.FocusWindow(w.ID)
 }
 
 // Update handles messages for all windows.
@@ -39,12 +41,12 @@ func (m *Manager) Update(msg tea.Msg) tea.Cmd {
 }
 
 // View renders all windows using a compositor.
-func (m *Manager) View() string {
+func (m *Manager) View() tea.View {
 	canvas := lipgloss.NewCanvas(m.Width, m.Height)
 	comp := lipgloss.NewCompositor()
 
 	for i, w := range m.Windows {
-		layer := lipgloss.NewLayer(w.View()).
+		layer := lipgloss.NewLayer(w.View().Content).
 			ID(w.ID).
 			X(w.X).
 			Y(w.Y).
@@ -52,47 +54,55 @@ func (m *Manager) View() string {
 		comp.AddLayers(layer)
 	}
 
-	return canvas.Compose(comp).Render()
+	return tea.NewView(canvas.Compose(comp).Render())
 }
 
 // HandleMouse handles mouse events for window management.
 func (m *Manager) HandleMouse(msg tea.MouseMsg) tea.Cmd {
-	switch msg.Type {
-	case tea.MouseLeft:
-		// Check for clicks in reverse Z-order
-		for i := len(m.Windows) - 1; i >= 0; i-- {
-			w := m.Windows[i]
-			if w.IsInResizeHandle(msg.X, msg.Y) {
-				w.Resizing = true
-				m.FocusWindow(w.ID)
-				return nil
-			}
-			if w.IsInTitleBar(msg.X, msg.Y) {
-				w.Dragging = true
-				m.FocusWindow(w.ID)
-				return nil
-			}
-			// Check if click is anywhere in the window to focus
-			if msg.X >= w.X && msg.X < w.X+w.Width && msg.Y >= w.Y && msg.Y < w.Y+w.Height {
-				m.FocusWindow(w.ID)
-				return nil
+	mouse := msg.Mouse()
+	dx := mouse.X - m.LastMouseX
+	dy := mouse.Y - m.LastMouseY
+	m.LastMouseX = mouse.X
+	m.LastMouseY = mouse.Y
+
+	switch msg.(type) {
+	case tea.MouseClickMsg:
+		if mouse.Button == tea.MouseLeft {
+			// Check for clicks in reverse Z-order
+			for i := len(m.Windows) - 1; i >= 0; i-- {
+				w := m.Windows[i]
+				if w.IsInResizeHandle(mouse.X, mouse.Y) {
+					w.Resizing = true
+					m.FocusWindow(w.ID)
+					return nil
+				}
+				if w.IsInTitleBar(mouse.X, mouse.Y) {
+					w.Dragging = true
+					m.FocusWindow(w.ID)
+					return nil
+				}
+				// Check if click is anywhere in the window to focus
+				if mouse.X >= w.X && mouse.X < w.X+w.Width && mouse.Y >= w.Y && mouse.Y < w.Y+w.Height {
+					m.FocusWindow(w.ID)
+					return nil
+				}
 			}
 		}
-	case tea.MouseRelease:
+	case tea.MouseReleaseMsg:
 		for _, w := range m.Windows {
 			w.Dragging = false
 			w.Resizing = false
 		}
-	case tea.MouseMotion:
+	case tea.MouseMotionMsg:
 		for _, w := range m.Windows {
 			if w.Dragging {
-				w.X += msg.DX
-				w.Y += msg.DY
+				w.X += dx
+				w.Y += dy
 				return nil
 			}
 			if w.Resizing {
-				w.Width += msg.DX
-				w.Height += msg.DY
+				w.Width += dx
+				w.Height += dy
 				if w.Width < 10 {
 					w.Width = 10
 				}
@@ -113,9 +123,9 @@ func (m *Manager) FocusWindow(id string) {
 			// Move to the end of the slice (top Z-index)
 			m.Windows = append(m.Windows[:i], m.Windows[i+1:]...)
 			m.Windows = append(m.Windows, w)
-			w.Focused = true
+			w.SetFocused(true)
 		} else {
-			w.Focused = false
+			w.SetFocused(false)
 		}
 	}
 }

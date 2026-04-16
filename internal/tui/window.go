@@ -5,6 +5,10 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+type Focusable interface {
+	SetFocused(bool)
+}
+
 // Window represents a single window in the TUI.
 type Window struct {
 	ID      string
@@ -41,6 +45,13 @@ func NewWindow(id, title string, model tea.Model) *Window {
 	}
 }
 
+func (w *Window) SetFocused(f bool) {
+	w.Focused = f
+	if focusable, ok := w.Model.(Focusable); ok {
+		focusable.SetFocused(f)
+	}
+}
+
 // Update updates the window's model.
 func (w *Window) Update(msg tea.Msg) (tea.Cmd) {
 	var cmd tea.Cmd
@@ -49,15 +60,17 @@ func (w *Window) Update(msg tea.Msg) (tea.Cmd) {
 }
 
 // View renders the window.
-func (w *Window) View() string {
+func (w *Window) View() tea.View {
 	style := w.Style
 	if w.Focused {
 		style = style.BorderForeground(lipgloss.Color("#EE6FF8"))
 	}
 
-	content := w.Model.View()
-	return style.
+	content := w.Model.View().Content
+	rendered := style.
 		Width(w.Width - style.GetHorizontalFrameSize()).
 		Height(w.Height - style.GetVerticalFrameSize()).
 		Render(content)
+	
+	return tea.NewView(rendered)
 }

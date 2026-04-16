@@ -39,7 +39,7 @@ func NewWizardModel() *WizardModel {
 				Value(&config.Persona),
 			huh.NewInput().
 				Title("API Key").
-				EchoMode(huh.EchoPassword).
+				EchoMode(huh.EchoModePassword).
 				Value(&config.APIKey),
 		),
 	)
@@ -67,8 +67,8 @@ func (m *WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *WizardModel) View() string {
-	return m.form.View()
+func (m *WizardModel) View() tea.View {
+	return tea.NewView(m.form.View())
 }
 
 func (m *WizardModel) IsDone() bool {

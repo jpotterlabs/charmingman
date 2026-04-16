@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"charmingman/internal/tui"
 	tea "charm.land/bubbletea/v2"
@@ -25,8 +26,8 @@ type rootModel struct {
 
 func initialModel() rootModel {
 	return rootModel{
-		state:  stateWizard,
-		wizard: tui.NewWizardModel(),
+		state:   stateWizard,
+		wizard:  tui.NewWizardModel(),
 		manager: tui.NewManager(),
 	}
 }
@@ -44,25 +45,47 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = stateDashboard
 			// Initialize dashboard with agent
 			chat := tui.NewChatModel()
-			chat.AddMessage(fmt.Sprintf("Agent %s initialized with model %s", m.wizard.Results.Name, m.wizard.Results.Model))
+			
+			// Map model names to providers for the backend
+			chat.Model = m.wizard.Results.Model
+			chat.APIKey = m.wizard.Results.APIKey
+			
+			switch {
+			case strings.Contains(strings.ToLower(chat.Model), "gpt"):
+				chat.Provider = "openai"
+			case strings.Contains(strings.ToLower(chat.Model), "claude"):
+				chat.Provider = "anthropic"
+			case strings.Contains(strings.ToLower(chat.Model), "llama3"):
+				chat.Provider = "ollama" // Default local to ollama for now
+			default:
+				chat.Provider = "openai"
+			}
+
+			chat.AddMessage(fmt.Sprintf("Agent %s initialized with model %s on provider %s", m.wizard.Results.Name, chat.Model, chat.Provider))
+			
 			win := tui.NewWindow(m.wizard.Results.Name, m.wizard.Results.Name, chat)
 			win.Width = 60
 			win.Height = 20
 			win.X = 10
 			win.Y = 5
+			
 			m.manager.AddWindow(win)
 			m.manager.SetSize(m.width, m.height)
+			
+			// Manually send initial size to the new chat model
+			chat.Update(tea.WindowSizeMsg{Width: win.Width - 2, Height: win.Height - 2})
+			
 			return m, nil
 		}
 		return m, cmd
 	case stateDashboard:
 		switch msg := msg.(type) {
-		case tea.KeyMsg:
+		case tea.KeyPressMsg:
 			switch msg.String() {
-			case "ctrl+c", "q":
+			case "ctrl+c":
 				return m, tea.Quit
 			case "tab":
-				if len(m.manager.Windows) > 0 {
+				if len(m.manager.Windows) > 1 {
 					focusedIdx := -1
 					for i, w := range m.manager.Windows {
 						if w.Focused {
@@ -70,13 +93,16 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							break
 						}
 					}
+					// Focus next window
 					nextIdx := (focusedIdx + 1) % len(m.manager.Windows)
 					m.manager.FocusWindow(m.manager.Windows[nextIdx].ID)
 				}
 			}
 		case tea.MouseMsg:
 			cmd := m.manager.HandleMouse(msg)
-			return m, cmd
+			if cmd != nil {
+				return m, cmd
+			}
 		case tea.WindowSizeMsg:
 			m.width = msg.Width
 			m.height = msg.Height
@@ -88,18 +114,22 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m rootModel) View() string {
+func (m rootModel) View() tea.View {
+	var v tea.View
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeAllMotion
+
 	switch m.state {
 	case stateWizard:
-		return m.wizard.View()
+		v.SetContent(m.wizard.View().Content)
 	case stateDashboard:
-		return m.manager.View()
+		v.SetContent(m.manager.View().Content)
 	}
-	return ""
+	return v
 }
 
 func main() {
-	p := tea.NewProgram(initialModel(), tea.WithAltScreen(), tea.WithMouseAllMotion())
+	p := tea.NewProgram(initialModel())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)
