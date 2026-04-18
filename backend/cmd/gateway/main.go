@@ -104,8 +104,17 @@ func main() {
 		v1.POST("/chat", chatHandler.HandleChat)
 		
 		v1.GET("/usage", func(c *gin.Context) {
-			limit, _ := strconv.ParseInt(c.DefaultQuery("limit", "100"), 10, 64)
-			offset, _ := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+			limit, err := strconv.ParseInt(c.DefaultQuery("limit", "100"), 10, 64)
+			if err != nil || limit <= 0 || limit > 1000 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid limit. Must be a positive integer <= 1000"})
+				return
+			}
+
+			offset, err := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+			if err != nil || offset < 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid offset. Must be a non-negative integer"})
+				return
+			}
 			
 			logs, err := queries.ListUsageLogs(c.Request.Context(), db.ListUsageLogsParams{
 				Limit:  limit,
@@ -116,7 +125,11 @@ func main() {
 				return
 			}
 			
-			stats, _ := queries.GetTotalUsage(c.Request.Context())
+			stats, err := queries.GetTotalUsage(c.Request.Context())
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
 			
 			c.JSON(http.StatusOK, gin.H{
 				"logs":  logs,
