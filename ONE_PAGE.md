@@ -1,40 +1,34 @@
-# CharmingMan — One‑Pager
-A privacy‑first, extensible multi‑agent assistant: a local‑first hybrid client that combines a fast Go TUI with optional cloud services for sync, managed embeddings, telephony, and premium LLMs. This one‑pager captures the problem, audience, product scope (MVP), architecture, platform/tech choices, top flows (including step‑by‑step happy paths for the top 3), security & operational constraints, and next steps for product & engineering.
+an extensible multi‑agent assistant: a local‑first hybrid client that combines a fast Go TUI with optional cloud services for sync, managed embeddings, telephony, and premium LLMs. 
+Build a modular multi‑agent assistant that runs locally (single‑binary TUI) with cloud integrations fIt enables power users to do RAG, transcription, agent orchestration, TTS, STT, telephonyKey features should include agent creation, room creation, and multiple agent orchestration with human orchestration using @mentions. eg, different agents within the same room are aware and can see other agents responess, the human coordination will callo n which agent speaks next using @mentions
 
----
+Process  documents, run agentic workflows, and integrate external tools — have all core features powered by either local or remote openai compatible keys
 
-## Elevator pitch
-CharmingMan is a modular multi‑agent assistant that runs locally (single‑binary TUI) with optional cloud integrations for sync, managed vector DBs, telephony and premium LLMs. It enables power users to do private RAG, transcription, agent orchestration, and tool-enabled automation while giving teams optional managed features (sync, backups, analytics).
+Modular, agentic orchestration: multiple agents with structured tool calls and stateful chatrooms.
+Deliver a productive, local‑first TUI client (Go / Bubble Tea) that can run on desktop.
+Implement multi‑agent orchestration, structured function/tool calling, and stateful chatrooms.
+Provide RAG over uploaded documents 
+Offer provider credential management
+Include Whisper transcription hybrid (like all other services)
 
----
 
-## Problem statement
-Power users and teams need an extensible assistant that can safely process sensitive documents, run agentic workflows, and integrate external tools — all while preserving privacy and offering a clear upgrade path to managed cloud features (sync, telephony, premium LLMs). Current solutions either force cloud-only processing (privacy risk) or are too heavy to run locally and lack multi‑agent orchestration and tool safety.
+Terminal TUI (Go, Bubble Tea + Bubbles + Lipgloss) as primary UI with a small web admin/portal for account/sync settings.
+Local agent manager + in‑process agent orchestration;
+LLM providers: local- ollama, vllm, llama.cpp; remote- openrouter, openai, anthropic
+Embeddings & vector DB: .
+Document ingestion: PDF & text upload, PDF text extraction, chunking, embedding, index/persist.
+Whisper transcription: local transcription servers (privacy) with cloud TTS (ElevenLabs) and Twilio for telephony optional.
+Agent & state: state machine for chatrooms & agents, structured message envelopes (metadata, tool calls, vector refs).
+Separate Concerns
+Frontend TUI is fully agnostic
+Backend API-Gateway is fully agnostic, providing a unified api abstracting to hundreds of llms
+Client: Go TUI — Bubble Tea, Bubbles, Lipgloss, Huh (wizard), Glow (markdown rendering)
+AI orchestration: Fantasy framework (LLM coordination, multi‑agent) + Catwalk (model DB)
+Providers: OpenAI compatible remote or local 
+Local Agent Manager: in‑process orchestrator and state machine
+Model Manager: handles local models, downloads, integrity checks
 
----
 
-## Target audience & ideal customer
-- Primary: Developer and data‑engineering power users who need local-sensitive processing, reproducible automations, and tools integration.
-- Secondary: Security/privacy engineers and knowledge workers who must handle sensitive documents (legal, compliance, research).
-- Ideal customer profile: Small engineering teams or privacy-conscious freelancers who want a local-first assistant with optional cloud services for sync and advanced features; willing to manage API keys for cloud integrations.
 
----
-
-## Core value proposition
-- Local-first privacy: sensitive data and core processing can remain on the client.
-- Modular, agentic orchestration: multiple agents with structured tool calls and stateful chatrooms.
-- Extensible tooling with safe defaults: minimal safe toolset for the MVP with explicit confirmations and per-agent allowlists.
-- Hybrid path to managed features: optional cloud sync, managed vectors (Pinecone), and premium LLMs (OpenAI) when users opt in.
-
----
-
-## MVP scope (what we will build first)
-Primary goals
-- Deliver a productive, local‑first TUI client (Go / Bubble Tea) that can run on desktop.
-- Implement multi‑agent orchestration, structured function/tool calling, and stateful chatrooms.
-- Provide RAG over uploaded documents (cloud embeddings + managed vector DB by default), plus a documented local-fallback plan.
-- Offer provider credential management and cloud sync (optional) backed by a REST sync server.
-- Include Whisper transcription hybrid (local transcription own servers) and cloud TTS/telephony integrations deferred to near-term iterations.
 
 Top flows (prioritized)
 1. Start conversation (core chat)
@@ -42,38 +36,6 @@ Top flows (prioritized)
 3. New agent creation (wizard)
 4. Provider credential management (OpenAI / HF / Pinecone)
 5. Sync / backup (REST delta sync to cloud)
-
-Step‑by‑step happy paths will be detailed for top 3 (see Flows section).
-
----
-
-## Key features (MVP)
-- Terminal TUI (Go, Bubble Tea + Bubbles + Lipgloss) as primary UI with a small web admin/portal for account/sync settings.
-- Local agent manager + in‑process agent orchestration; optional MCP WebSocket server for multi‑client topology.
-- LLM providers: OpenAI + Hugging Face Inference (Llama 2 / Mistral hosted models).
-- Embeddings & vector DB: OpenAI embeddings + Pinecone managed vector DB (default). Local HNSW + SQLite fallback documented for offline‑only users.
-- Document ingestion: PDF & text upload, PDF text extraction, chunking, embedding, index/persist.
-- Whisper transcription: local transcription servers (privacy) with cloud TTS (ElevenLabs) and Twilio for telephony optional.
-- Tooling: minimal safe‑toolset — HTTP fetcher, web search, file reader + limited shell (explicit user confirmation), and safe external HTTP proxies/whitelists.
-- Agent & state: state machine for chatrooms & agents, structured message envelopes (metadata, tool calls, vector refs).
-- Persistence: SQLite local DB (SQLDelight recommended) + local artifacts (attachments, models) directory.
-- Secrets: OS native keyring for API keys; encrypted file fallback.
-- Concurrency: fixed-size worker pool (pre‑fork) one worker per CPU core (min 2, cap 16), shared queue (length 500), 429 when full.
-
----
-
-## Tech stack (MVP)
-- Client: Go TUI — Bubble Tea, Bubbles, Lipgloss, Huh (wizard), Glow (markdown rendering)
-- AI orchestration: Fantasy framework (LLM coordination, multi‑agent) + Catwalk (model DB)
-- Backend services:
-  - Sync server: small REST service for delta sync (SQLite server‑side), user accounts (email/SSO), and optional encrypted storage.
-  - MCP WebSocket server for agent messaging/presence (TLS).
-- Providers: OpenAI (LLMs & embeddings), Hugging Face Inference, Pinecone, Twilio (deferred), ElevenLabs (deferred).
-- Persistence: SQLite (local client DB via SQLDelight), local FS for artifacts/models.
-- Packaging: single static Go binary for desktop; optional installers for platform dependencies.
-
----
-
 ## Architecture overview (high level)
 - Client (TUI)
   - Presentation: Bubble Tea UI

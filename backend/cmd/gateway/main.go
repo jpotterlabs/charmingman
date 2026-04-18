@@ -1,13 +1,18 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
+	"charmingman/backend/internal/db"
 	"charmingman/backend/internal/handler"
 	"charmingman/backend/internal/provider"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 )
 
@@ -15,8 +20,23 @@ func main() {
 	// Load .env file if it exists
 	_ = godotenv.Load()
 
+	ctx := context.Background()
+
+	// Initialize Database
+	dataDir := os.Getenv("DATA_DIR")
+	if dataDir == "" {
+		dataDir = "."
+	}
+	dbConn, err := db.Connect(ctx, dataDir)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer dbConn.Close()
+
+	queries := db.New(dbConn)
+
 	// Initialize Provider Service
-	ps := provider.NewProviderService()
+	ps := provider.NewProviderService(queries)
 
 	// Register providers from environment variables
 	openaiKey := os.Getenv("OPENAI_API_KEY")
@@ -82,11 +102,74 @@ func main() {
 	v1 := r.Group("/api/v1")
 	{
 		v1.POST("/chat", chatHandler.HandleChat)
+		
+		v1.GET("/usage", func(c *gin.Context) {
+			limit, _ := strconv.ParseInt(c.DefaultQuery("limit", "100"), 10, 64)
+			offset, _ := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+			
+			logs, err := queries.ListUsageLogs(c.Request.Context(), db.ListUsageLogsParams{
+				Limit:  limit,
+				Offset: offset,
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			
+			stats, _ := queries.GetTotalUsage(c.Request.Context())
+			
+			c.JSON(http.StatusOK, gin.H{
+				"logs":  logs,
+				"stats": stats,
+			})
+		})
+
+		v1.GET("/agents", func(c *gin.Context) {
+			agents, err := queries.ListAgents(c.Request.Context())
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, agents)
+		})
+
+		v1.POST("/agents", func(c *gin.Context) {
+			var req struct {
+				ID       string `json:"id"`
+				Name     string `json:"name" binding:"required"`
+				Model    string `json:"model" binding:"required"`
+				Provider string `json:"provider" binding:"required"`
+				Persona  string `json:"persona"`
+				APIKey   string `json:"api_key"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			if req.ID == "" {
+				req.ID = uuid.New().String()
+			}
+
+			agent, err := queries.CreateAgent(c.Request.Context(), db.CreateAgentParams{
+				ID:       req.ID,
+				Name:     req.Name,
+				Model:    req.Model,
+				Provider: req.Provider,
+				Persona:  sql.NullString{String: req.Persona, Valid: req.Persona != ""},
+				ApiKey:   sql.NullString{String: req.APIKey, Valid: req.APIKey != ""},
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusCreated, agent)
+		})
 	}
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = "8090"
 	}
 
 	log.Printf("AI Gateway starting on port %s", port)

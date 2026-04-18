@@ -1,0 +1,37 @@
+version: '3'
+
+tasks:
+  sqlc:
+    desc: Generate Go code from SQL using sqlc
+    dir: backend
+    cmds:
+      - go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.27.0 generate
+
+  build-backend:
+    desc: Build the AI Gateway backend
+    dir: backend
+    cmds:
+      - go build -v ./...
+
+  build-tui:
+    desc: Build the CharmingMan TUI
+    cmds:
+      - go build -o charmingman .
+
+  test:
+    desc: Run all backend tests
+    dir: backend
+    cmds:
+      - go test -v ./...
+
+  run-backend:
+    desc: Run the AI Gateway backend
+    dir: backend
+    cmds:
+      - go run cmd/gateway/main.go
+
+  run-tui:
+    desc: Run the CharmingMan TUI
+    deps: [build-tui]
+    cmds:
+      - ./charmingman

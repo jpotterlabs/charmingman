@@ -25,7 +25,7 @@ The CharmingMan project consists of a unified AI Gateway (backend) and a multi-a
 1. Navigate to the `backend/` directory.
 2. Create or edit the `.env` file:
    ```env
-   PORT=8080
+   PORT=8090
    GATEWAY_API_KEY=your-secret-key-here
    OPENAI_API_KEY=sk-...
    ANTHROPIC_API_KEY=ant-...
@@ -49,7 +49,7 @@ The CharmingMan project consists of a unified AI Gateway (backend) and a multi-a
 ### Testing the API (Backend):
 All requests must include the `X-Charming-Key` header.
 ```bash
-curl -X POST http://localhost:8080/api/v1/chat \
+curl -X POST http://localhost:8090/api/v1/chat \
   -H "Content-Type: application/json" \
   -H "X-Charming-Key: your-secret-key-here" \
   -d '{
