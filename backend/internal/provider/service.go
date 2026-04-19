@@ -81,11 +81,11 @@ func (s *ProviderService) Chat(ctx context.Context, providerName, modelName, pro
 	}
 	latency := time.Since(startTime)
 
-	// Log usage asynchronously to avoid blocking the response
+	// Log usage asynchronously with a short timeout
 	if s.queries != nil {
 		go func() {
-			logCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
+			logCtx, logCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer logCancel()
 
 			_, err := s.queries.LogUsage(logCtx, db.LogUsageParams{
 				Provider:         providerName,
@@ -94,7 +94,7 @@ func (s *ProviderService) Chat(ctx context.Context, providerName, modelName, pro
 				CompletionTokens: int64(result.Response.Usage.OutputTokens),
 				TotalTokens:      int64(result.Response.Usage.TotalTokens),
 				LatencyMs:        latency.Milliseconds(),
-				Cost:             sql.NullFloat64{Valid: false},
+				Cost:             sql.NullFloat64{Valid: false}, // Unknown cost for now
 			})
 			if err != nil {
 				log.Printf("Warning: failed to log usage: %v", err)

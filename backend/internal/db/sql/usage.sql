@@ -9,11 +9,11 @@ RETURNING *;
 -- name: GetTotalUsage :one
 SELECT
     COALESCE(SUM(total_tokens), 0) as total_tokens,
-    COALESCE(SUM(cost), 0) as total_cost,
+    COALESCE(SUM(cost), 0.0) as total_cost,
     COUNT(*) as total_requests
 FROM usage_log;
 
 -- name: ListUsageLogs :many
 SELECT * FROM usage_log
-ORDER BY timestamp DESC
+ORDER BY timestamp DESC, id DESC
 LIMIT ? OFFSET ?;

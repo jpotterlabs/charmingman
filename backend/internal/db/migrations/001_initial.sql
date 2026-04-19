@@ -1,6 +1,4 @@
 -- +goose Up
--- Migration plan: api_key_ref stores a non-secret reference/identifier instead of plaintext API keys.
--- Future: Create a separate secrets table or use OS keyring for actual secret storage.
 -- Agents table
 CREATE TABLE agents (
     id TEXT PRIMARY KEY,
@@ -8,7 +6,7 @@ CREATE TABLE agents (
     model TEXT NOT NULL,
     provider TEXT NOT NULL,
     persona TEXT,
-    api_key_ref TEXT,
+    api_key_ref TEXT, -- Reference to secret manager or encrypted store
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -34,6 +32,9 @@ CREATE TABLE messages (
     FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE,
     FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL
 );
+CREATE INDEX idx_messages_room_id ON messages(room_id);
+CREATE INDEX idx_messages_room_id_created_at ON messages(room_id, created_at);
+CREATE INDEX idx_messages_agent_id ON messages(agent_id);
 
 -- Usage Log table
 CREATE TABLE usage_log (
@@ -47,9 +48,10 @@ CREATE TABLE usage_log (
     cost REAL DEFAULT 0.0,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_usage_log_timestamp ON usage_log(timestamp);
 
 -- +goose Down
-DROP TABLE IF EXISTS usage_log;
-DROP TABLE IF EXISTS messages;
-DROP TABLE IF EXISTS rooms;
-DROP TABLE IF EXISTS agents;
+DROP TABLE usage_log;
+DROP TABLE messages;
+DROP TABLE rooms;
+DROP TABLE agents;

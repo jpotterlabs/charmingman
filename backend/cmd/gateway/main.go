@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"charmingman/backend/internal/db"
 	"charmingman/backend/internal/handler"
@@ -16,27 +17,37 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// AgentResponse is the DTO returned by agent endpoints (excludes api_key)
 type AgentResponse struct {
-	ID        string         `json:"id"`
-	Name      string         `json:"name"`
-	Model     string         `json:"model"`
-	Provider  string         `json:"provider"`
-	Persona   sql.NullString `json:"persona"`
-	CreatedAt sql.NullTime   `json:"created_at"`
-	UpdatedAt sql.NullTime   `json:"updated_at"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Model     string    `json:"model"`
+	Provider  string    `json:"provider"`
+	Persona   string    `json:"persona"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// toAgentResponse converts a db.Agent to AgentResponse (omitting api_key)
-func toAgentResponse(agent db.Agent) AgentResponse {
+func listRowToAgentResponse(a db.ListAgentsRow) AgentResponse {
 	return AgentResponse{
-		ID:        agent.ID,
-		Name:      agent.Name,
-		Model:     agent.Model,
-		Provider:  agent.Provider,
-		Persona:   agent.Persona,
-		CreatedAt: agent.CreatedAt,
-		UpdatedAt: agent.UpdatedAt,
+		ID:        a.ID,
+		Name:      a.Name,
+		Model:     a.Model,
+		Provider:  a.Provider,
+		Persona:   a.Persona.String,
+		CreatedAt: a.CreatedAt.Time,
+		UpdatedAt: a.UpdatedAt.Time,
+	}
+}
+
+func createRowToAgentResponse(a db.CreateAgentRow) AgentResponse {
+	return AgentResponse{
+		ID:        a.ID,
+		Name:      a.Name,
+		Model:     a.Model,
+		Provider:  a.Provider,
+		Persona:   a.Persona.String,
+		CreatedAt: a.CreatedAt.Time,
+		UpdatedAt: a.UpdatedAt.Time,
 	}
 }
 
@@ -167,12 +178,12 @@ func main() {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			// Map to DTO to exclude api_key
-			response := make([]AgentResponse, len(agents))
-			for i, agent := range agents {
-				response[i] = toAgentResponse(agent)
+			
+			resp := make([]AgentResponse, len(agents))
+			for i, a := range agents {
+				resp[i] = listRowToAgentResponse(a)
 			}
-			c.JSON(http.StatusOK, response)
+			c.JSON(http.StatusOK, resp)
 		})
 
 		v1.POST("/agents", func(c *gin.Context) {
@@ -199,14 +210,13 @@ func main() {
 				Model:    req.Model,
 				Provider: req.Provider,
 				Persona:  sql.NullString{String: req.Persona, Valid: req.Persona != ""},
-				ApiKey:   sql.NullString{String: req.APIKey, Valid: req.APIKey != ""},
+				ApiKeyRef: sql.NullString{String: req.APIKey, Valid: req.APIKey != ""},
 			})
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			// Return DTO to exclude api_key
-			c.JSON(http.StatusCreated, toAgentResponse(agent))
+			c.JSON(http.StatusCreated, createRowToAgentResponse(agent))
 		})
 	}
 

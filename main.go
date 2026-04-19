@@ -19,6 +19,7 @@ const (
 	stateWizard state = iota
 	stateDashboard
 	stateSavingAgent
+	stateSaveFailed
 )
 
 type agentSavedMsg struct {
@@ -31,6 +32,7 @@ type rootModel struct {
 	manager *tui.Manager
 	width   int
 	height  int
+	err     error
 }
 
 func initialModel() rootModel {
@@ -46,6 +48,15 @@ func (m rootModel) Init() tea.Cmd {
 }
 
 func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Capture window size updates regardless of state
+	if msg, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = msg.Width
+		m.height = msg.Height
+		if m.state == stateDashboard {
+			m.manager.SetSize(msg.Width, msg.Height)
+		}
+	}
+
 	switch m.state {
 	case stateWizard:
 		newWizard, cmd := m.wizard.Update(msg)
@@ -59,16 +70,25 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stateSavingAgent:
 		if msg, ok := msg.(agentSavedMsg); ok {
 			if msg.Error != nil {
-				// On error, log and stay in error state or go back to wizard
-				fmt.Printf("Error saving agent: %v\n", msg.Error)
-				// Stay in saving state showing error (or transition to wizard)
-				// For now, return to wizard on error
-				m.state = stateWizard
+				m.err = msg.Error
+				m.state = stateSaveFailed
 				return m, nil
 			}
-			// Only proceed to dashboard on success
 			m.state = stateDashboard
+			m.manager.SetSize(m.width, m.height)
 			return m, m.initDashboard()
+		}
+		return m, nil
+
+	case stateSaveFailed:
+		if msg, ok := msg.(tea.KeyPressMsg); ok {
+			if msg.String() == "enter" {
+				m.state = stateSavingAgent
+				return m, m.saveAgent()
+			}
+			if msg.String() == "q" || msg.String() == "ctrl+c" {
+				return m, tea.Quit
+			}
 		}
 		return m, nil
 
@@ -97,10 +117,6 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if cmd != nil {
 				return m, cmd
 			}
-		case tea.WindowSizeMsg:
-			m.width = msg.Width
-			m.height = msg.Height
-			m.manager.SetSize(msg.Width, msg.Height)
 		}
 		cmd := m.manager.Update(msg)
 		return m, cmd
@@ -118,6 +134,8 @@ func (m rootModel) View() tea.View {
 		v.SetContent(m.wizard.View().Content)
 	case stateSavingAgent:
 		v.SetContent("Saving agent to gateway...")
+	case stateSaveFailed:
+		v.SetContent(fmt.Sprintf("Error saving agent: %v\n\nPress Enter to retry, or q to quit.", m.err))
 	case stateDashboard:
 		v.SetContent(m.manager.View().Content)
 	}
@@ -126,17 +144,21 @@ func (m rootModel) View() tea.View {
 
 func (m rootModel) saveAgent() tea.Cmd {
 	return func() tea.Msg {
-		url := os.Getenv("GATEWAY_URL")
-		if url == "" {
-			url = "http://localhost:8090/api/v1/agents"
-		} else {
-			// Normalize to /api/v1/agents endpoint
-			url = strings.TrimSuffix(url, "/")
-			url = strings.TrimSuffix(url, "/agents")
-			url = strings.TrimSuffix(url, "/chat")
-			url = strings.TrimSuffix(url, "/api/v1")
-			url = strings.TrimSuffix(url, "/api")
-			url = url + "/api/v1/agents"
+		rawURL := os.Getenv("GATEWAY_URL")
+		if rawURL == "" {
+			rawURL = "http://localhost:8090"
+		}
+
+		// Normalize URL to /api/v1/agents
+		baseURL := strings.TrimRight(rawURL, "/")
+		baseURL = strings.TrimSuffix(baseURL, "/api/v1/chat")
+		baseURL = strings.TrimSuffix(baseURL, "/api/v1/agents")
+		baseURL = strings.TrimSuffix(baseURL, "/chat")
+		baseURL = strings.TrimSuffix(baseURL, "/agents")
+		
+		finalURL := baseURL + "/api/v1/agents"
+		if !strings.Contains(finalURL, "://") {
+			finalURL = "http://" + finalURL
 		}
 
 		// Map model names to providers for the backend
@@ -164,18 +186,17 @@ func (m rootModel) saveAgent() tea.Cmd {
 			return agentSavedMsg{Error: err}
 		}
 
-		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("POST", finalURL, bytes.NewBuffer(jsonData))
 		if err != nil {
 			return agentSavedMsg{Error: err}
 		}
-
-		gatewayAPIKey := os.Getenv("GATEWAY_API_KEY")
-		if gatewayAPIKey == "" {
+		req.Header.Set("Content-Type", "application/json")
+		
+		apiKey := os.Getenv("GATEWAY_API_KEY")
+		if apiKey == "" {
 			return agentSavedMsg{Error: fmt.Errorf("GATEWAY_API_KEY environment variable is not set")}
 		}
-
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-Charming-Key", gatewayAPIKey)
+		req.Header.Set("X-Charming-Key", apiKey)
 
 		client := &http.Client{Timeout: 5 * time.Second}
 		resp, err := client.Do(req)
@@ -185,7 +206,11 @@ func (m rootModel) saveAgent() tea.Cmd {
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-			return agentSavedMsg{Error: fmt.Errorf("server error: %d", resp.StatusCode)}
+			var errResp struct {
+				Error string `json:"error"`
+			}
+			json.NewDecoder(resp.Body).Decode(&errResp)
+			return agentSavedMsg{Error: fmt.Errorf("server error (%d): %s", resp.StatusCode, errResp.Error)}
 		}
 
 		return agentSavedMsg{}
@@ -217,8 +242,8 @@ func (m rootModel) initDashboard() tea.Cmd {
 	win.Y = 5
 	
 	m.manager.AddWindow(win)
-	m.manager.SetSize(m.width, m.height)
 	
+	// Pass the actual current root dimensions to the initial resize
 	return func() tea.Msg {
 		return tea.WindowSizeMsg{Width: win.Width - 2, Height: win.Height - 2}
 	}
