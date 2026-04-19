@@ -23,7 +23,7 @@ Phases 1-3 cover the foundation of CharmingMan: AI Gateway, SQLite persistence (
   - `chunker.go`: Test recursive text splitting, exact boundaries, overlapping rules, and fallback mechanisms for extremely long tokens without whitespaces.
   - `extractor.go`: Use temp directories and mock files to test text extraction (Markdown, TXT) and unsupported formats. 
   - `local.go` (Vector Store): Validate exact cosine similarity calculations, top-K selection logic, and metadata deep-copying to prevent mutation side-effects.
-  - Integration Test: Write an end-to-end ingestion test from file parsing to embedding (using a Mock Embedder) to querying.
+  - **Context Injection Tests**: Unit test the logic that injects retrieved chunks into LLM prompts, ensuring formatting and token limits are respected.
 
 ---
 
@@ -36,12 +36,14 @@ Phases 4-5 introduce complex TUI features and multi-agent interactions.
 - **Testing Approach:**
   - **Headless TUI Testing:** Use `charmbracelet/bubbletea/teatest` to simulate keystrokes and assert on view models without actually rendering to a physical terminal.
   - **Coordinate Math Unit Tests:** Write tests for the Canvas model to verify viewport boundaries, panning offsets, and node coordinate translations (x, y geometry constraints).
+  - **Auto-Rescaling Tests**: Simulate terminal window resizing events and assert that window $(x, y)$ and $(w, h)$ are rescaled correctly within the viewport.
   - **Visual Regression:** Capture string outputs of `lipgloss` rendering and use snapshot tests to ensure UI changes don't unexpectedly break the layout.
 
 ### Multi-Agent @Mentions & MCP Tool Calling
 - **Objective:** Ensure accurate routing of prompts to specific agents and robust tool execution.
 - **Testing Approach:**
   - **Agent Stream Testing:** Mock the `fantasy.Agent` interface to verify that `@Agent` parsing correctly segments the prompt and passes the right context.
+  - **Deep-Copy Mutation Tests**: Ensure that when multiple agents are active, their internal state (like message history) is deep-copied during routing to prevent "crosstalk" mutations.
   - **Tool Call Sandboxing:** Unit test the MCP (Model Context Protocol) executor by providing mock tools (e.g., fake CLI runner) to ensure proper JSON argument parsing, execution, and error bubbling if a tool fails.
 
 ### Whisper STT / TTS

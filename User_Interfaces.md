@@ -1,77 +1,82 @@
-Build a configurable "Window Manager" using **Bubble Tea** and **Lipgloss**. Make use of comprehensive mouse support.
+# CharmingMan User Interfaces & Layouts
 
-Build out 5 pre-set user interfaceds for CharmingManusing the abbove Window Manager.
+CharmingMan features a modular, configurable "Window Manager" built with **Bubble Tea** and **Lipgloss**. This system supports both a traditional tiling window manager and a revolutionary **Infinity Canvas**.
 
-**Requirements**
-1.  **Mouse Support:** You have to explicitly tell your program to listen for mouse events by setting the `MouseMode` in your `View()` (e.g., `tea.MouseModeAllMotion`).
-2.  **Tracking State:** You define a "window" as a struct with an `X`, `Y`, `Width`, and `Height`.
-3.  **Handling Events:**
-    * **Moving:** When a `tea.MouseClickMsg` hits your "title bar" area, you set a `dragging` flag to true. As long as the button is held, you use `tea.MouseMotionMsg` to update the window's `X` and `Y` coordinates based on the cursor's movement.
-    * **Resizing:** Similar to moving, but you listen for clicks on the border or a corner "handle." When the mouse moves, you increment/decrement the `Width` and `Height` values of your component.
-4.  **Rendering:** You use **Lipgloss** to render the window at those specific coordinates using `lipgloss.Place()` or by calculating the padding/margins dynamically.
-5. Pre-build components assemble to become pre-set User Interfaces.
-6. Implement "double-click to maximize" a pane
+## 1. The Infinity Canvas
 
-**Watch this space**
+The Infinity Canvas is a non-linear spatial environment. It moves beyond 1D streams (standard chat) and 2D grids (dashboards) to provide a **Spatial Workspace**.
 
-* **`Lipgloss v2`:** Recently introduced a `Canvas` and `Layer` system that makes "Z-index" (stacking windows on top of each other) and coordinate-based positioning much easier than the original version.
-* **The "Bubbles" Viewport:** While primarily for scrolling, it’s often used as the "inner pane" of a custom window.
+### Key Concepts:
+- **Spatial Layout**: Windows are placed at absolute $(x, y)$ coordinates in a global "world."
+- **Camera Panning**: Move the view using `Ctrl + Arrow Keys` or mouse drag on the workspace background.
+- **Camera Zooming**: Scale the entire workspace using `Ctrl + +` and `Ctrl + -` (or mouse wheel).
+- **World-to-Screen Mapping**: The engine dynamically translates global coordinates and zoom factors into terminal screen characters.
 
-**Pro-tip:** Most TUI users still prefer keyboard shortcuts, so if you build mouse-resizable windows, definitely map `Ctrl+Arrows` or similar to do the same thing for the "no-mouse" crowd!
+## 2. YAML-Driven Layouts (`layout.yaml`)
 
+To make UIs shareable and maintainable, CharmingMan uses a standardized `layout.yaml` manifest.
 
-That is a massive leap forward for the **CharmingMan** ecosystem. By treating the UI as a **modular, shareable asset**, you’re moving from a "Chat App" to a "TUI Framework for Agents."
-
-In the Go/Charm world, this essentially means creating a **Spec-Driven UI** where the layout isn't hardcoded, but rather interpreted from a configuration file (like YAML or JSON) or even a Go plugin.
-
----
-
-### 1. The "CharmingManifest" (UI-as-Code)
-To make UIs shareable, you need a standardized way to describe them. Users could define a `layout.yaml` that CharmingMan parses to build the `Bubble Tea` view:
+### Schema Overview:
 
 ```yaml
 name: "The Researcher"
-author: "RomanHistorian90"
-layout:
-  type: "split-horizontal"
-  panes:
-    - id: "main-chat"
-      width: 70%
-      component: "viewport"
-    - id: "sidebar"
-      width: 30%
-      type: "stack-vertical"
-      components:
-        - "token-monitor"
-        - "agent-status"
-        - "mcp-explorer"
+author: "CharmingTeam"
+canvas:
+  background: "dots" # Background pattern (dots, grid, none)
+  zoom: 1.0
+  camera:
+    x: 0
+    y: 0
+panes:
+  - id: "main-chat"
+    component: "chat"
+    x: 10
+    y: 5
+    width: 60
+    height: 20
+    fixed: false # Can be dragged
+    props:
+      agent_id: "researcher-v1"
+  - id: "stage"
+    component: "stage"
+    x: 75
+    y: 5
+    width: 40
+    height: 30
+    fixed: true
 ```
 
-### 2. A "Pluggable" Component Gallery
-If users can create their own UIs, you’ll want a library of "widgets" they can drop in. Since you’re already using **Bubbles** and **Huh?**, these widgets are already modular:
-* **The Log-Streamer:** A terminal-style tail of agent reasoning.
-* **The Markdown-Stage:** A `Glow` powered area for the final output.
-* **The Tool-Belt:** A grid of buttons (clickable via mouse) to trigger specific MCP tools or local Python scripts via `uv`.
+### Advanced Features:
 
-### 3. Sharing via "Charming Registry"
-Imagine a command like `charmingman ui install big-agi-clone`. 
-* **Implementation:** The app fetches the manifest from a GitHub repo or a central registry.
-* **Theming:** Using **Catwalk**, the shared UI automatically adapts to the user's local terminal colors, so a UI designed in "Dracula" still looks great for a user on "Solarized Light."
+1. **Semantic Validation**:
+   The loader performs checks to ensure:
+   - All `component` types are registered (e.g., `chat`, `stage`, `status`).
+   - `id`s are unique.
+   - Initial positions are within reasonable bounds.
 
-### 4. The "Live Designer" Mode
-Since you mentioned mouse support (resizing/moving), you could have a **"Design Mode"** within the app:
-1.  **Enter Design Mode:** `Ctrl+D`.
-2.  **Interact:** Drag borders to resize, right-click to change a pane's component (e.g., swap a Chat window for a PDF viewer).
-3.  **Export:** `Ctrl+S` saves the current state as a new manifest file that can be shared.
+2. **Auto-Rescaling**:
+   When the terminal window size changes, CharmingMan calculates a scale factor. Window dimensions ($w, h$) and coordinates ($x, y$) are rescaled to ensure the layout remains visually consistent even on smaller screens.
 
----
+3. **Inter-Component Messaging**:
+   Components can communicate via a shared message bus. For example, a "mention" in a `chat` component can trigger a focus change in another agent's window.
 
-### Technical Challenge: Dynamic Typing in Go
-Since Go is a statically typed language, creating a truly "dynamic" UI that loads at runtime can be tricky. You have two main paths:
-* **The Interpretive Path:** You write a "Master Model" in `Bubble Tea` that knows how to render a variety of components based on the YAML spec.
-* **The Plugin Path:** You use Go's `plugin` package or **WebAssembly (Wasm)** to allow users to compile their own UI components and "hot-swap" them into the running CharmingMan binary.
+## 3. Mouse Support & Interactions
 
-### The "Big-AGI" Connection
-Just as **big-AGI** allows users to customize their "Models," "Personas," and "Prompts," **CharmingMan** would allow them to customize the **"Glass"** through which they interact with their agents. This is perfect for your **Spec Driven Design** tool—one user might want a UI optimized for writing code, while another wants one optimized for historical research.
+CharmingMan provides high-fidelity mouse integration:
+- **Dragging**: Click and hold a window's title bar to move it across the canvas.
+- **Resizing**: Click and drag the borders or corner handles of a window.
+- **Focusing**: Clicking anywhere inside a window brings it to the front (Z-index update).
+- **Maximizing**: Double-click a title bar to toggle full-screen focus.
 
-Does the idea of a **YAML-based layout engine** sound like the right level of complexity, or were you thinking of something even more dynamic?
+## 4. Keyboard Navigation
+
+For "no-mouse" enthusiasts, keyboard shortcuts provide full control:
+- `Tab`: Cycle focus between windows.
+- `Ctrl + N`: Create a new agent window.
+- `Ctrl + Arrow Keys`: Pan the canvas camera.
+- `Ctrl + W`: Close the active window.
+- `/`: Enter "Command Mode" for model switching or tool execution.
+
+## 5. Visual Styling with `Catwalk` & `Lipgloss`
+
+CharmingMan uses `Catwalk` to ensure that agent themes (Mauve for GPT-4, Green for Ollama) look great on any terminal color scheme (Dracula, Nord, Solarized). Borders, padding, and accent colors are all dynamically calculated based on the active terminal theme.

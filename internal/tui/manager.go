@@ -29,11 +29,8 @@ func NewManager() *Manager {
 }
 
 // AddWindow adds a new window to the manager.
-func (m *Manager) AddWindow(w *Window, focus bool) {
+func (m *Manager) AddWindow(w *Window) {
 	m.Windows = append(m.Windows, w)
-	if focus {
-		m.FocusWindow(w.ID)
-	}
 }
 
 // Update handles messages for all windows.
@@ -59,7 +56,7 @@ func (m *Manager) Update(msg tea.Msg) tea.Cmd {
 		return tea.Batch(cmds...)
 	}
 
-	// Handle global panning/zooming keys
+	// Handle global panning/zooming keys (consume them)
 	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		handled := false
 		switch msg.String() {
@@ -109,13 +106,10 @@ func (m *Manager) View() tea.View {
 	canvas := lipgloss.NewCanvas(m.Width, m.Height)
 	comp := lipgloss.NewCompositor()
 
-	// 1. Draw Windows
 	for i, w := range m.Windows {
-		// Calculate world-to-screen coordinates
+		// Calculate world-to-screen coordinates with scaling
 		screenX := int(float64(w.X-m.OffsetX) * m.Zoom)
 		screenY := int(float64(w.Y-m.OffsetY) * m.Zoom)
-
-		// Calculate scaled dimensions for consistent coordinate system
 		scaledWidth := int(float64(w.Width) * m.Zoom)
 		scaledHeight := int(float64(w.Height) * m.Zoom)
 
@@ -128,7 +122,7 @@ func (m *Manager) View() tea.View {
 			ID(w.ID).
 			X(screenX).
 			Y(screenY).
-			Z(i)
+			Z(i) 
 		comp.AddLayers(layer)
 	}
 
@@ -146,24 +140,30 @@ func (m *Manager) HandleMouse(msg tea.MouseMsg) tea.Cmd {
 	switch msg.(type) {
 	case tea.MouseClickMsg:
 		if mouse.Button == tea.MouseLeft {
-			// Check for clicks in reverse Z-order
+			// Check for clicks in reverse Z-order using scaled bounds
 			for i := len(m.Windows) - 1; i >= 0; i-- {
 				w := m.Windows[i]
+				
+				// Calculate scaled position on screen
+				screenX := int(float64(w.X-m.OffsetX) * m.Zoom)
+				screenY := int(float64(w.Y-m.OffsetY) * m.Zoom)
+				scaledWidth := int(float64(w.Width) * m.Zoom)
+				scaledHeight := int(float64(w.Height) * m.Zoom)
 
-				worldX := int(float64(mouse.X)/m.Zoom) + m.OffsetX
-				worldY := int(float64(mouse.Y)/m.Zoom) + m.OffsetY
-
-				if worldX >= w.X+w.Width-2 && worldX < w.X+w.Width && worldY >= w.Y+w.Height-1 && worldY < w.Y+w.Height {
+				// Resize handle (bottom right)
+				if mouse.X >= screenX+scaledWidth-2 && mouse.X < screenX+scaledWidth && mouse.Y >= screenY+scaledHeight-1 && mouse.Y < screenY+scaledHeight {
 					w.Resizing = true
 					m.FocusWindow(w.ID)
 					return nil
 				}
-				if worldX >= w.X && worldX < w.X+w.Width && worldY == w.Y {
+				// Title bar (top row)
+				if mouse.X >= screenX && mouse.X < screenX+scaledWidth && mouse.Y == screenY {
 					w.Dragging = true
 					m.FocusWindow(w.ID)
 					return nil
 				}
-				if worldX >= w.X && worldX < w.X+w.Width && worldY >= w.Y && worldY < w.Y+w.Height {
+				// Anywhere else in window
+				if mouse.X >= screenX && mouse.X < screenX+scaledWidth && mouse.Y >= screenY && mouse.Y < screenY+scaledHeight {
 					m.FocusWindow(w.ID)
 					return nil
 				}
@@ -194,6 +194,7 @@ func (m *Manager) HandleMouse(msg tea.MouseMsg) tea.Cmd {
 		}
 
 		if !anyDragging && mouse.Button == tea.MouseLeft {
+			// Background pan
 			m.OffsetX -= int(float64(dx) / m.Zoom)
 			m.OffsetY -= int(float64(dy) / m.Zoom)
 		}
@@ -205,6 +206,7 @@ func (m *Manager) HandleMouse(msg tea.MouseMsg) tea.Cmd {
 func (m *Manager) FocusWindow(id string) {
 	for i, w := range m.Windows {
 		if w.ID == id {
+			// Move to the end of the slice (top Z-index)
 			m.Windows = append(m.Windows[:i], m.Windows[i+1:]...)
 			m.Windows = append(m.Windows, w)
 			w.SetFocused(true)
