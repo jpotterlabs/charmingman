@@ -29,7 +29,14 @@ type Source struct {
 	Score      float32 `json:"score"`
 }
 
+// RouteMsg is a message to be routed to a specific agent by name/mention.
+type RouteMsg struct {
+	Mention string
+	Prompt  string
+}
+
 type ChatModel struct {
+	ID        string
 	viewport  viewport.Model
 	textinput textinput.Model
 	history   []string
@@ -39,17 +46,20 @@ type ChatModel struct {
 	Focused   bool
 
 	// Agent config
+	AgentID  string
 	Provider string
 	Model    string
 	APIKey   string
 	UseRAG   bool
+	RoomID   string
 }
 
-func NewChatModel() *ChatModel {
+func NewChatModel(id string) *ChatModel {
 	ti := textinput.New()
 	ti.Placeholder = "Send a message..."
 
 	return &ChatModel{
+		ID:        id,
 		history:   make([]string, 0),
 		textinput: ti,
 	}
@@ -89,6 +99,21 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				userInput := m.textinput.Value()
 				if userInput != "" {
+					// Check for @mention
+					if strings.HasPrefix(userInput, "@") {
+						parts := strings.SplitN(userInput, " ", 2)
+						mention := strings.TrimPrefix(parts[0], "@")
+						prompt := ""
+						if len(parts) > 1 {
+							prompt = parts[1]
+						}
+						// Clear input and send RouteMsg to be handled by the manager
+						m.textinput.SetValue("")
+						return m, func() tea.Msg {
+							return RouteMsg{Mention: mention, Prompt: prompt}
+						}
+					}
+
 					m.AddMessage(fmt.Sprintf("You: %s", userInput))
 					m.textinput.SetValue("")
 					cmds = append(cmds, m.sendMessage(userInput))
@@ -105,7 +130,6 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.AddMessage(fmt.Sprintf("AI: %s", msg.Response))
 			if len(msg.Sources) > 0 {
 				m.AddMessage("Sources:")
-				// Show top 3 sources
 				limit := len(msg.Sources)
 				if limit > 3 {
 					limit = 3
@@ -113,8 +137,6 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				for i := 0; i < limit; i++ {
 					s := msg.Sources[i]
 					m.AddMessage(fmt.Sprintf("  [%d] Doc: %s (Score: %.2f)", i+1, s.DocumentID, s.Score))
-					
-					// Rune-aware truncation for snippet
 					runes := []rune(s.Content)
 					snippet := string(runes)
 					if len(runes) > 100 {
@@ -123,6 +145,13 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.AddMessage(fmt.Sprintf("      \"%s\"", snippet))
 				}
 			}
+		}
+	
+	case RouteMsg:
+		// If we are the target of the mention, process the prompt
+		if strings.EqualFold(m.ID, msg.Mention) {
+			m.AddMessage(fmt.Sprintf("Mentioned with: %s", msg.Prompt))
+			cmds = append(cmds, m.sendMessage(msg.Prompt))
 		}
 	}
 
@@ -168,7 +197,6 @@ func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 		if rawURL == "" {
 			finalURL = "http://localhost:8090/api/v1/chat"
 		} else {
-			// Ensure scheme exists
 			if !strings.Contains(rawURL, "://") {
 				rawURL = "http://" + rawURL
 			}
@@ -179,15 +207,11 @@ func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 			if u.Host == "" {
 				return chatResponseMsg{Error: fmt.Errorf("invalid GATEWAY_URL: missing host")}
 			}
-			
-			// Normalize path
 			if u.Path == "" || u.Path == "/" || u.Path == "/api/v1" {
 				u.Path = "/api/v1/chat"
 			} else if !strings.HasSuffix(u.Path, "/chat") && !strings.HasSuffix(u.Path, "/chat/") {
-				// If it's something like /v1, append /chat
 				u.Path = strings.TrimRight(u.Path, "/") + "/chat"
 			}
-			
 			finalURL = u.String()
 		}
 		
@@ -196,6 +220,8 @@ func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 			"model":    m.Model,
 			"prompt":   prompt,
 			"use_rag":  m.UseRAG,
+			"room_id":  m.RoomID,
+			"agent_id": m.AgentID,
 		}
 		
 		jsonData, err := json.Marshal(payload)
@@ -207,7 +233,6 @@ func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 		if err != nil {
 			return chatResponseMsg{Error: err}
 		}
-
 		req.Header.Set("Content-Type", "application/json")
 		
 		apiKey := os.Getenv("GATEWAY_API_KEY")
@@ -216,7 +241,7 @@ func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 		}
 		req.Header.Set("X-Charming-Key", apiKey)
 
-		client := &http.Client{Timeout: 35 * time.Second} // Slightly longer than gateway timeout
+		client := &http.Client{Timeout: 35 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
 			return chatResponseMsg{Error: err}

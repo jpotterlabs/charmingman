@@ -6,32 +6,41 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type LayoutConfig struct {
-	Name    string         `yaml:"name"`
+type Layout struct {
 	Windows []WindowConfig `yaml:"windows"`
 }
 
 type WindowConfig struct {
-	ID        string `yaml:"id"`
-	Title     string `yaml:"title"`
-	Component string `yaml:"component"`
-	X         int    `yaml:"x"`
-	Y         int    `yaml:"y"`
-	Width     int    `yaml:"width"`
-	Height    int    `yaml:"height"`
+	ID      string            `yaml:"id"`
+	Title   string            `yaml:"title"`
+	Type    string            `yaml:"type"` // chat, document, tool
+	X       int               `yaml:"x"`
+	Y       int               `yaml:"y"`
+	Width   int               `yaml:"width"`
+	Height  int               `yaml:"height"`
+	Focused bool              `yaml:"focused"`
+	Config  ComponentConfig   `yaml:"config"`
 }
 
-func LoadLayout(path string) (*LayoutConfig, error) {
+type ComponentConfig struct {
+	Provider string `yaml:"provider"`
+	Model    string `yaml:"model"`
+	Persona  string `yaml:"persona"`
+	UseRAG   bool   `yaml:"use_rag"`
+	Content  string `yaml:"content"` // For document type
+}
+
+// LoadLayout loads the layout configuration from a YAML file.
+func LoadLayout(path string) (*Layout, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	var config LayoutConfig
-	err = yaml.Unmarshal(data, &config)
-	if err != nil {
+	var layout Layout
+	if err := yaml.Unmarshal(data, &layout); err != nil {
 		return nil, err
 	}
 
-	return &config, nil
+	return &layout, nil
 }

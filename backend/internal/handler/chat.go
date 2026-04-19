@@ -1,14 +1,18 @@
 package handler
 
 import (
+	"context"
+	"database/sql"
 	"log"
 	"net/http"
 	"strings"
 
+	"charmingman/backend/internal/db"
 	"charmingman/backend/internal/document"
 	"charmingman/backend/internal/provider"
 	"charm.land/fantasy"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type ChatRequest struct {
@@ -16,24 +20,28 @@ type ChatRequest struct {
 	Model    string `json:"model" binding:"required"`
 	Prompt   string `json:"prompt" binding:"required"`
 	UseRAG   bool   `json:"use_rag"`
+	RoomID   string `json:"room_id"`
+	AgentID  string `json:"agent_id"`
 }
 
 type ChatResponse struct {
-	Response string        `json:"response"`
-	Usage    fantasy.Usage `json:"usage"`
-	Error    string        `json:"error,omitempty"`
+	Response string                  `json:"response"`
+	Usage    fantasy.Usage           `json:"usage"`
+	Error    string                  `json:"error,omitempty"`
 	Sources  []document.SearchResult `json:"sources,omitempty"`
 }
 
 type ChatHandler struct {
 	providerService *provider.ProviderService
 	documentService *document.DocumentService
+	queries         *db.Queries
 }
 
-func NewChatHandler(ps *provider.ProviderService, ds *document.DocumentService) *ChatHandler {
+func NewChatHandler(ps *provider.ProviderService, ds *document.DocumentService, q *db.Queries) *ChatHandler {
 	return &ChatHandler{
 		providerService: ps,
 		documentService: ds,
+		queries:         q,
 	}
 }
 
@@ -47,10 +55,25 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 	prompt := req.Prompt
 	var sources []document.SearchResult
 
+	// 1. Fetch History if RoomID provided
+	var history []fantasy.Message
+	if req.RoomID != "" && h.queries != nil {
+		dbMsgs, err := h.queries.ListMessagesByRoom(c.Request.Context(), req.RoomID)
+		if err == nil {
+			for _, m := range dbMsgs {
+				role := fantasy.MessageRole(m.Role)
+				history = append(history, fantasy.Message{
+					Role:    role,
+					Content: []fantasy.MessagePart{fantasy.TextPart{Text: m.Content}},
+				})
+			}
+		}
+	}
+
+	// 2. Perform RAG Search if requested
 	if req.UseRAG && h.documentService != nil {
 		results, err := h.documentService.Search(c.Request.Context(), req.Prompt, 3)
 		if err != nil {
-			// Redact prompt in logs to avoid leaking sensitive data
 			safePrompt := req.Prompt
 			if len(safePrompt) > 20 {
 				safePrompt = safePrompt[:20] + "..."
@@ -71,7 +94,18 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		}
 	}
 
-	res, err := h.providerService.Chat(c.Request.Context(), req.Provider, req.Model, prompt)
+	// 3. Persist User Message
+	if req.RoomID != "" && h.queries != nil {
+		_, _ = h.queries.CreateMessage(context.Background(), db.CreateMessageParams{
+			ID:      uuid.New().String(),
+			RoomID:  req.RoomID,
+			Role:    string(fantasy.MessageRoleUser),
+			Content: req.Prompt,
+		})
+	}
+
+	// 4. Call Model
+	res, err := h.providerService.Chat(c.Request.Context(), req.Provider, req.Model, prompt, history)
 	if err != nil {
 		if strings.Contains(err.Error(), "not registered") {
 			c.JSON(http.StatusBadRequest, ChatResponse{Error: err.Error()})
@@ -79,6 +113,19 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, ChatResponse{Error: err.Error()})
 		}
 		return
+	}
+
+	// 5. Persist Assistant Message
+	if req.RoomID != "" && h.queries != nil {
+		agentID := sql.NullString{String: req.AgentID, Valid: req.AgentID != ""}
+		_, _ = h.queries.CreateMessage(context.Background(), db.CreateMessageParams{
+			ID:         uuid.New().String(),
+			RoomID:     req.RoomID,
+			AgentID:    agentID,
+			Role:       string(fantasy.MessageRoleAssistant),
+			Content:    res.Content.Text(),
+			TokensUsed: sql.NullInt64{Int64: res.Usage.TotalTokens, Valid: true},
+		})
 	}
 
 	c.JSON(http.StatusOK, ChatResponse{
