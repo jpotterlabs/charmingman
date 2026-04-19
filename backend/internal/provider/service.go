@@ -58,7 +58,7 @@ func (s *ProviderService) RegisterLocal(name, baseURL string) error {
 	return nil
 }
 
-func (s *ProviderService) Chat(ctx context.Context, providerName, modelName, prompt string, history []fantasy.Message) (*fantasy.Response, error) {
+func (s *ProviderService) Chat(ctx context.Context, providerName, modelName string, history []fantasy.Message) (*fantasy.Response, error) {
 	p, ok := s.providers[providerName]
 	if !ok {
 		return nil, fmt.Errorf("provider %s not registered", providerName)
@@ -77,7 +77,6 @@ func (s *ProviderService) Chat(ctx context.Context, providerName, modelName, pro
 	agent := fantasy.NewAgent(model)
 	
 	call := fantasy.AgentCall{
-		Prompt:   prompt,
 		Messages: history,
 	}
 

@@ -113,8 +113,8 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		Content: []fantasy.MessagePart{fantasy.TextPart{Text: prompt}},
 	})
 
-	// 5. Call Model
-	res, err := h.providerService.Chat(c.Request.Context(), req.Provider, req.Model, prompt, augmentedHistory)
+	// 5. Call Model (using only history which now contains the current prompt)
+	res, err := h.providerService.Chat(c.Request.Context(), req.Provider, req.Model, augmentedHistory)
 	if err != nil {
 		if strings.Contains(err.Error(), "not registered") {
 			c.JSON(http.StatusBadRequest, ChatResponse{Error: err.Error()})
