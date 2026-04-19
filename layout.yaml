@@ -25,13 +25,29 @@ windows:
     config:
       content: "# System Ready\n\nInfinity Canvas initialized."
 
+  - id: "tools"
+    title: "Tool Belt"
+    type: "tool"
+    x: 65
+    y: 32
+    width: 40
+    height: 10
+
+  - id: "voice"
+    title: "Voice Command"
+    type: "voice"
+    x: 110
+    y: 32
+    width: 35
+    height: 10
+
   - id: "think-log"
     title: "Reasoning Trace"
     type: "chat"
     x: 2
     y: 28
     width: 60
-    height: 10
+    height: 15
     config:
       provider: "ollama"
       model: "llama3"

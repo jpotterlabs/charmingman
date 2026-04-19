@@ -18,12 +18,14 @@ type ProviderService struct {
 	// Map of provider name to fantasy provider
 	providers map[string]fantasy.Provider
 	queries   *db.Queries
+	tools     []fantasy.AgentTool
 }
 
 func NewProviderService(queries *db.Queries) *ProviderService {
 	return &ProviderService{
 		providers: make(map[string]fantasy.Provider),
 		queries:   queries,
+		tools:     make([]fantasy.AgentTool, 0),
 	}
 }
 
@@ -58,6 +60,14 @@ func (s *ProviderService) RegisterLocal(name, baseURL string) error {
 	return nil
 }
 
+func (s *ProviderService) RegisterTool(tool fantasy.AgentTool) {
+	s.tools = append(s.tools, tool)
+}
+
+func (s *ProviderService) ListTools() []fantasy.AgentTool {
+	return s.tools
+}
+
 func (s *ProviderService) Chat(ctx context.Context, providerName, modelName string, history []fantasy.Message) (*fantasy.Response, error) {
 	p, ok := s.providers[providerName]
 	if !ok {
@@ -74,7 +84,8 @@ func (s *ProviderService) Chat(ctx context.Context, providerName, modelName stri
 		return nil, err
 	}
 
-	agent := fantasy.NewAgent(model)
+	// Enable tools for all agents via WithTools option
+	agent := fantasy.NewAgent(model, fantasy.WithTools(s.tools...))
 	
 	call := fantasy.AgentCall{
 		Messages: history,

@@ -14,20 +14,25 @@
 - **Dynamic Interaction**: Full mouse support for dragging and resizing windows, with camera panning and zooming for global navigation.
 - **World-to-Screen Mapping**: Intelligent rendering that maps high-resolution world coordinates to terminal character grids.
 
-### 3. Intelligence & RAG
+### 3. Voice & Multimodal (New in Phase 5)
+- **Whisper STT**: Integrated Speech-to-Text via OpenAI Whisper for hands-free interaction.
+- **TUI Recording**: Trigger voice recording directly from the terminal using the 'v' key.
+- **Audio Capture**: Leverages system-level `sox` for high-fidelity audio capture in the TUI.
+
+### 4. Intelligence & RAG
 - **Deep Document Integration**: Ground agent responses in PDFs, Markdown, and Text files.
 - **Automated Context Injection**: Relevant chunks of your data are intelligently injected into prompts based on the query.
 - **RAG Safety**: Deep-copy mutation protections ensure that concurrent RAG queries do not interfere with agent states.
 
-### 4. Advanced TUI Engine
+### 5. Advanced TUI Engine
 - **YAML Layouts**: Fully configurable workspaces defined via `layout.yaml`. Supports semantic validation and auto-rescaling for various terminal sizes.
 - **The Stage**: A dedicated high-performance viewport using `Glow` for inspecting documents, code, and artifacts.
-- **Adaptive Themes**: Visual consistency across all terminal themes (Dark, Light, Dracula, etc.) using `Catwalk`.
+- **Adaptive Themes**: Visual consistency across all terminal themes using `Catwalk`.
 
-### 5. AI Gateway (Middleware)
+### 6. AI Gateway (Middleware)
 - **Unified Provider API**: Single endpoint access for OpenAI, Anthropic, Ollama, and llama.cpp.
-- **Security-First Design**: Includes prompt redaction in persistent logs and strict path-traversal protections for document ingestion.
-- **Performance**: High-speed streaming responses and asynchronous usage logging.
+- **Multimodal API**: Dedicated transcription endpoint for audio-to-text processing.
+- **Security-First Design**: Includes prompt redaction in persistent logs and strict path-traversal protections.
 
 ## 🗺️ Implementation Roadmap
 
@@ -48,7 +53,12 @@
 - Multi-agent @mention routing and RoomID context.
 - YAML-driven layout system with semantic validation.
 
-### Phase 5: Voice & Multimedia [IN PROGRESS]
+### Phase 5: Voice & Multimedia [COMPLETED]
+- Whisper STT (Speech-to-Text) integration.
+- Bounded chat history and stability improvements.
+- Secure log redaction and coordinate scaling fixes.
+
+### Phase 6: TTS & MCP [IN PROGRESS]
 - Model Context Protocol (MCP) for local tool calling.
-- Whisper STT (Speech-to-Text) and TTS (Text-to-Speech) integration.
+- Text-to-Speech (TTS) for agent responses.
 - Telephony features and multi-modal agentic triggers.

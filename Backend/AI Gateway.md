@@ -1,122 +1,88 @@
-Build a unified web api that functions as a AI Gateway, providing unified API access to many AI models through a single endpoint
+Build a unified web api that functions as a AI Gateway, providing unified API access to many AI models through a single endpoint.
 
 # AI Gateway
 
-- openai-chat-completions
-- responses
-- anthropic-messages-api
-- framework-integrations
-The AI Gateway provides a unified API to access hundreds of AI models through a single endpoint, with built-in budgets, usage monitoring, and fallbacks.
+The AI Gateway provides a unified API to access hundreds of AI models through a single endpoint, with built-in budgets, usage monitoring, fallbacks, and security.
 
 ---
 
-# AI Gateway
+## 🚀 Key Endpoints
 
-> **AIG Requirements**
+### 1. Chat Completions
+`POST /api/v1/chat`
 
-## AI Gateway Capabilities with Examples
+Handles multi-agent routing, history retrieval, and RAG injection.
+- **Provider Support**: OpenAI, Anthropic, Ollama, llama.cpp.
+- **Features**: @mention routing, RoomID persistence, Bounded history (last 10 messages).
+
+### 2. Transcription (STT) - *New in Phase 5*
+`POST /api/v1/transcribe`
+
+Provides high-fidelity speech-to-text using OpenAI's Whisper model.
+- **Request Type**: `multipart/form-data`
+- **Fields**:
+  - `file`: The audio file to transcribe (e.g., `.wav`, `.mp3`).
+- **Response**:
+  ```json
+  {
+    "text": "The transcribed text from the audio."
+  }
+  ```
+- **Requirements**: Requires a valid `OPENAI_API_KEY` on the gateway server.
+
+### 3. Document Ingestion
+`POST /api/v1/documents`
+
+Upload and index documents for RAG.
+- **Supported Formats**: `.pdf`, `.md`, `.txt`.
+- **Security**: Built-in path-traversal protection.
+
+---
+
+## 🔒 Security & Performance
+
+- **Prompt Redaction**: Sensitive information is automatically redacted from database logs.
+- **History Bounding**: History retrieval is capped at the last 10 messages to ensure performance and stay within model context limits.
+- **Deep-Copy Mutation Safety**: State objects are deep-copied during routing to prevent crosstalk between concurrent agent requests.
+- **Unified Auth**: Access all downstream providers using a single `GATEWAY_API_KEY` (X-Charming-Key).
+
+---
+
+## 🛠️ Configuration (Example .env)
+
+```env
+PORT=8090
+GATEWAY_API_KEY=your-secret-key-here
+OPENAI_API_KEY=sk-... # REQUIRED for embeddings and Whisper STT
+ANTHROPIC_API_KEY=ant-...
+
+# Pinecone Configuration (Optional)
+PINECONE_API_KEY=your-pinecone-key
+PINECONE_INDEX=your-index-name
+
+# Document Storage
+DOCUMENTS_ROOT=./documents
+```
+
+---
+
+## 🗺️ Capabilities
 
 **Text Generation**
-- Reasoning
-- Complex_Problem_Solving
-- Question_Anwering
-- Search_Web.py
+- Reasoning & Problem Solving
+- Multi-agent Swarm Routing
+- Persistent Context (RoomID)
 
-**ChatRoom_Management**
-- Create New Room
-- Add documents to room
-- add instructions to room
-- add goal to room
+**Audio (Phase 5)**
+- **STT**: Whisper-1 integration for voice input.
+- **TTS**: (Planned) ElevenLabs / OpenAI TTS integration.
 
-**Agent_Management**
-- Create_New_Agent
-- Create_From_Source (SMS, Youtube video, etc)
-- Enable_Reasoning / Step-by-Step_Thinking
-- Set_Knowledge_Cut-off_Date
-- Give models access to current information with Web Search
+**Document Management**
+- Automated Chunking & Embedding
+- Local & Cloud (Pinecone) Vector Stores
+- PDF Extraction
 
-
-**Provider_Management**
-- Multi-provider_support
-- Multiple_Output_Formats
-
-
-**Document_Management**
-- Create_New_Document
-- Upload_New_Document
-
-**Visual content**
-- Generate_New_Image
-    - Image_Type
-    - Model
-        - UI Component Mockups
-        - Wireframing
-        - Character
-        - Product
-    - Prompting
-- Create_Marketing_Assets
-- Edit_Image_with_Text
-- Create videos from text, images, or video	, resolution and duration control
-- Text_to_Image
-- Image_to_Image
-
-- Generate_New_Video
-    - Length_in_Seconds
-    - Model
-    - Prompting
-    - Text-to-video
-    - Image-to-Video
-    - Video-to-Video
-    
-**Obervability**
-- Track_Requests
-- Track_Responses
-- Structure_Requests
-- STructure_Responses
-- Monitor and debug AI requests
-- Request traces
-- token counts
-- latency metrics
-- spend tracking
-
-**Sentence Transformation**
-
-**TTS**
-- Speak typed text
-- Add speaker to agent
-- Select voice
-- Clone voice
-- Describe voice
-
-**STT**
-- Select Source
-- Select Model
-
-**Web Search**
-- Provider-agnostic search
-- Native provider search tools
-
-**Data Access Web API**
-- Create_New_Dashboard
-    - By_Model
-    - By_Agent
-    - By_Room
-    - By_User
-    - By_Tag
-    - By_Provider
-    - By_Credential
-    
-    
-    
-- **One key, hundreds of models.** The AIG must provide a unified API to access through a single endpoint and API Key.
-- **Each provider can have separate settings for budget, usage, balance, and fallbacks.
-- ** The AIG should work with AI-SDK, Chat Completions, Responses, Anthropic Messages or other framework.
-- Local (Ollama, llama.cpp, vllm) 
-- Remote (Openrouter, OpenAI, Anthropic, etc...)
-- **One key, hundreds of models.** Access models from multiple providers with a single API key
-- **Unified API.** Switch between providers and models with minimal code changes
-- **High reliability.** Automatically retries requests to other providers if one fails
-- **Embeddings support.** Generate vector embeddings for search, retrieval, and other tasks
-- **Spend monitoring.** Monitor your spending across different providers
-    
-
+**Observability**
+- Request/Response Tracing
+- Log Redaction
+- Token Usage Monitoring
