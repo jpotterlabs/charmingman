@@ -16,6 +16,7 @@ type AgentConfig struct {
 	Model     string
 	Persona   string
 	APIKey    string
+	UseRAG    bool
 }
 
 func NewWizardModel() *WizardModel {
@@ -41,6 +42,9 @@ func NewWizardModel() *WizardModel {
 				Title("API Key").
 				EchoMode(huh.EchoModePassword).
 				Value(&config.APIKey),
+			huh.NewConfirm().
+				Title("Use RAG (Knowledge Base)").
+				Value(&config.UseRAG),
 		),
 	)
 
@@ -61,6 +65,11 @@ func (m *WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.form.State == huh.StateCompleted {
+		m.Results.Name = *m.form.Get("Agent Name").(*string)
+		m.Results.Model = *m.form.Get("Model").(*string)
+		m.Results.Persona = *m.form.Get("Persona").(*string)
+		m.Results.APIKey = *m.form.Get("API Key").(*string)
+		m.Results.UseRAG = *m.form.Get("Use RAG (Knowledge Base)").(*bool)
 		m.done = true
 	}
 

@@ -16,35 +16,44 @@ INSERT INTO agents (
 ) VALUES (
     ?, ?, ?, ?, ?, ?
 )
-RETURNING id, name, model, provider, persona, NULL AS api_key_ref, created_at, updated_at
+RETURNING id, name, model, provider, persona, created_at, updated_at
 `
 
 type CreateAgentParams struct {
-	ID       string         `json:"id"`
-	Name     string         `json:"name"`
-	Model    string         `json:"model"`
-	Provider string         `json:"provider"`
-	Persona  sql.NullString `json:"persona"`
-	ApiKey   sql.NullString `json:"api_key"`
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Model     string         `json:"model"`
+	Provider  string         `json:"provider"`
+	Persona   sql.NullString `json:"persona"`
+	ApiKeyRef sql.NullString `json:"api_key_ref"`
 }
 
-func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent, error) {
+type CreateAgentRow struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Model     string         `json:"model"`
+	Provider  string         `json:"provider"`
+	Persona   sql.NullString `json:"persona"`
+	CreatedAt sql.NullTime   `json:"created_at"`
+	UpdatedAt sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (CreateAgentRow, error) {
 	row := q.queryRow(ctx, q.createAgentStmt, createAgent,
 		arg.ID,
 		arg.Name,
 		arg.Model,
 		arg.Provider,
 		arg.Persona,
-		arg.ApiKey,
+		arg.ApiKeyRef,
 	)
-	var i Agent
+	var i CreateAgentRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Model,
 		&i.Provider,
 		&i.Persona,
-		&i.ApiKeyRef,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -61,8 +70,38 @@ func (q *Queries) DeleteAgent(ctx context.Context, id string) error {
 	return err
 }
 
+const getAgent = `-- name: GetAgent :one
+SELECT id, name, model, provider, persona, created_at, updated_at
+FROM agents
+WHERE id = ? LIMIT 1
+`
+
+type GetAgentRow struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Model     string         `json:"model"`
+	Provider  string         `json:"provider"`
+	Persona   sql.NullString `json:"persona"`
+	CreatedAt sql.NullTime   `json:"created_at"`
+	UpdatedAt sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) GetAgent(ctx context.Context, id string) (GetAgentRow, error) {
+	row := q.queryRow(ctx, q.getAgentStmt, getAgent, id)
+	var i GetAgentRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Model,
+		&i.Provider,
+		&i.Persona,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getAgentSecret = `-- name: GetAgentSecret :one
--- Internal query for retrieving agent secrets
 SELECT api_key_ref FROM agents
 WHERE id = ? LIMIT 1
 `
@@ -74,48 +113,37 @@ func (q *Queries) GetAgentSecret(ctx context.Context, id string) (sql.NullString
 	return api_key_ref, err
 }
 
-const getAgent = `-- name: GetAgent :one
-SELECT id, name, model, provider, persona, NULL AS api_key_ref, created_at, updated_at FROM agents
-WHERE id = ? LIMIT 1
-`
-
-func (q *Queries) GetAgent(ctx context.Context, id string) (Agent, error) {
-	row := q.queryRow(ctx, q.getAgentStmt, getAgent, id)
-	var i Agent
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Model,
-		&i.Provider,
-		&i.Persona,
-		&i.ApiKeyRef,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const listAgents = `-- name: ListAgents :many
-SELECT id, name, model, provider, persona, NULL AS api_key_ref, created_at, updated_at FROM agents
+SELECT id, name, model, provider, persona, created_at, updated_at
+FROM agents
 ORDER BY name
 `
 
-func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
+type ListAgentsRow struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Model     string         `json:"model"`
+	Provider  string         `json:"provider"`
+	Persona   sql.NullString `json:"persona"`
+	CreatedAt sql.NullTime   `json:"created_at"`
+	UpdatedAt sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) ListAgents(ctx context.Context) ([]ListAgentsRow, error) {
 	rows, err := q.query(ctx, q.listAgentsStmt, listAgents)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Agent{}
+	items := []ListAgentsRow{}
 	for rows.Next() {
-		var i Agent
+		var i ListAgentsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
 			&i.Model,
 			&i.Provider,
 			&i.Persona,
-			&i.ApiKeyRef,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -141,35 +169,44 @@ SET name = ?,
     api_key_ref = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, name, model, provider, persona, NULL AS api_key_ref, created_at, updated_at
+RETURNING id, name, model, provider, persona, created_at, updated_at
 `
 
 type UpdateAgentParams struct {
-	Name     string         `json:"name"`
-	Model    string         `json:"model"`
-	Provider string         `json:"provider"`
-	Persona  sql.NullString `json:"persona"`
-	ApiKey   sql.NullString `json:"api_key"`
-	ID       string         `json:"id"`
+	Name      string         `json:"name"`
+	Model     string         `json:"model"`
+	Provider  string         `json:"provider"`
+	Persona   sql.NullString `json:"persona"`
+	ApiKeyRef sql.NullString `json:"api_key_ref"`
+	ID        string         `json:"id"`
 }
 
-func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Agent, error) {
+type UpdateAgentRow struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Model     string         `json:"model"`
+	Provider  string         `json:"provider"`
+	Persona   sql.NullString `json:"persona"`
+	CreatedAt sql.NullTime   `json:"created_at"`
+	UpdatedAt sql.NullTime   `json:"updated_at"`
+}
+
+func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (UpdateAgentRow, error) {
 	row := q.queryRow(ctx, q.updateAgentStmt, updateAgent,
 		arg.Name,
 		arg.Model,
 		arg.Provider,
 		arg.Persona,
-		arg.ApiKey,
+		arg.ApiKeyRef,
 		arg.ID,
 	)
-	var i Agent
+	var i UpdateAgentRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Model,
 		&i.Provider,
 		&i.Persona,
-		&i.ApiKeyRef,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

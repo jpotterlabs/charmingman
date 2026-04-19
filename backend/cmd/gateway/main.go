@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"charmingman/backend/internal/db"
+	"charmingman/backend/internal/document"
 	"charmingman/backend/internal/handler"
 	"charmingman/backend/internal/provider"
+	"charmingman/backend/internal/vector"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
@@ -27,7 +29,19 @@ type AgentResponse struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func agentToResponse(a db.Agent) AgentResponse {
+func listRowToAgentResponse(a db.ListAgentsRow) AgentResponse {
+	return AgentResponse{
+		ID:        a.ID,
+		Name:      a.Name,
+		Model:     a.Model,
+		Provider:  a.Provider,
+		Persona:   a.Persona.String,
+		CreatedAt: a.CreatedAt.Time,
+		UpdatedAt: a.UpdatedAt.Time,
+	}
+}
+
+func createRowToAgentResponse(a db.CreateAgentRow) AgentResponse {
 	return AgentResponse{
 		ID:        a.ID,
 		Name:      a.Name,
@@ -58,11 +72,31 @@ func main() {
 
 	queries := db.New(dbConn)
 
-	// Initialize Provider Service
+	// Initialize Vector Store and Embedder
+	var embedder vector.Embedder
+	openaiKey := os.Getenv("OPENAI_API_KEY")
+	if openaiKey != "" {
+		embedder = vector.NewOpenAIEmbedder(openaiKey, "")
+	}
+
+	var vStore vector.VectorStore = vector.NewLocalStore()
+	pineconeKey := os.Getenv("PINECONE_API_KEY")
+	pineconeIndex := os.Getenv("PINECONE_INDEX")
+	if pineconeKey != "" && pineconeIndex != "" {
+		ps, err := vector.NewPineconeStore(pineconeKey, pineconeIndex, "charmingman")
+		if err != nil {
+			log.Printf("Failed to initialize Pinecone: %v. Falling back to local store.", err)
+		} else {
+			vStore = ps
+			log.Println("Pinecone vector store initialized")
+		}
+	}
+
+	// Initialize Services
 	ps := provider.NewProviderService(queries)
+	docService := document.NewDocumentService(queries, embedder, vStore)
 
 	// Register providers from environment variables
-	openaiKey := os.Getenv("OPENAI_API_KEY")
 	if openaiKey != "" {
 		if err := ps.RegisterOpenAI(openaiKey); err != nil {
 			log.Printf("Failed to register OpenAI: %v", err)
@@ -99,7 +133,7 @@ func main() {
 	}
 
 	// Initialize Handlers
-	chatHandler := handler.NewChatHandler(ps)
+	chatHandler := handler.NewChatHandler(ps, docService)
 
 	// Setup Gin router
 	r := gin.Default()
@@ -166,10 +200,10 @@ func main() {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-
+			
 			resp := make([]AgentResponse, len(agents))
 			for i, a := range agents {
-				resp[i] = agentToResponse(a)
+				resp[i] = listRowToAgentResponse(a)
 			}
 			c.JSON(http.StatusOK, resp)
 		})
@@ -198,13 +232,62 @@ func main() {
 				Model:    req.Model,
 				Provider: req.Provider,
 				Persona:  sql.NullString{String: req.Persona, Valid: req.Persona != ""},
-				ApiKey:   sql.NullString{String: req.APIKey, Valid: req.APIKey != ""},
+				ApiKeyRef: sql.NullString{String: req.APIKey, Valid: req.APIKey != ""},
 			})
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			c.JSON(http.StatusCreated, agentToResponse(agent))
+			c.JSON(http.StatusCreated, createRowToAgentResponse(agent))
+		})
+
+		// Document Endpoints
+		v1.POST("/documents", func(c *gin.Context) {
+			var req struct {
+				Title string `json:"title" binding:"required"`
+				Path  string `json:"path" binding:"required"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			if embedder == nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Embedder not initialized (OPENAI_API_KEY missing)"})
+				return
+			}
+
+			docID, err := docService.AddDocument(c.Request.Context(), req.Title, req.Path)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+
+			c.JSON(http.StatusCreated, gin.H{"id": docID})
+		})
+
+		v1.GET("/search", func(c *gin.Context) {
+			query := c.Query("q")
+			if query == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Query parameter 'q' is required"})
+				return
+			}
+
+			limitStr := c.DefaultQuery("limit", "5")
+			limit, _ := strconv.Atoi(limitStr)
+
+			if embedder == nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Embedder not initialized"})
+				return
+			}
+
+			results, err := docService.Search(c.Request.Context(), query, limit)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+
+			c.JSON(http.StatusOK, results)
 		})
 	}
 

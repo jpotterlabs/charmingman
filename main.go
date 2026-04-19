@@ -48,7 +48,6 @@ func (m rootModel) Init() tea.Cmd {
 }
 
 func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Capture window size updates regardless of state
 	if msg, ok := msg.(tea.WindowSizeMsg); ok {
 		m.width = msg.Width
 		m.height = msg.Height
@@ -107,7 +106,6 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							break
 						}
 					}
-					// Focus next window
 					nextIdx := (focusedIdx + 1) % len(m.manager.Windows)
 					m.manager.FocusWindow(m.manager.Windows[nextIdx].ID)
 				}
@@ -149,7 +147,6 @@ func (m rootModel) saveAgent() tea.Cmd {
 			rawURL = "http://localhost:8090"
 		}
 
-		// Normalize URL to /api/v1/agents
 		baseURL := strings.TrimRight(rawURL, "/")
 		baseURL = strings.TrimSuffix(baseURL, "/api/v1/chat")
 		baseURL = strings.TrimSuffix(baseURL, "/api/v1/agents")
@@ -161,7 +158,6 @@ func (m rootModel) saveAgent() tea.Cmd {
 			finalURL = "http://" + finalURL
 		}
 
-		// Map model names to providers for the backend
 		provider := "openai"
 		model := m.wizard.Results.Model
 		switch {
@@ -173,12 +169,13 @@ func (m rootModel) saveAgent() tea.Cmd {
 			provider = "ollama"
 		}
 
-		payload := map[string]string{
+		payload := map[string]interface{}{
 			"name":     m.wizard.Results.Name,
 			"model":    model,
 			"provider": provider,
 			"persona":  m.wizard.Results.Persona,
 			"api_key":  m.wizard.Results.APIKey,
+			"use_rag":  m.wizard.Results.UseRAG,
 		}
 
 		jsonData, err := json.Marshal(payload)
@@ -218,9 +215,11 @@ func (m rootModel) saveAgent() tea.Cmd {
 }
 
 func (m rootModel) initDashboard() tea.Cmd {
+	// 1. Chat Window
 	chat := tui.NewChatModel()
 	chat.Model = m.wizard.Results.Model
 	chat.APIKey = m.wizard.Results.APIKey
+	chat.UseRAG = m.wizard.Results.UseRAG
 	
 	switch {
 	case strings.Contains(strings.ToLower(chat.Model), "gpt"):
@@ -235,18 +234,32 @@ func (m rootModel) initDashboard() tea.Cmd {
 
 	chat.AddMessage(fmt.Sprintf("Agent %s initialized and saved!", m.wizard.Results.Name))
 	
-	win := tui.NewWindow(m.wizard.Results.Name, m.wizard.Results.Name, chat)
-	win.Width = 60
-	win.Height = 20
-	win.X = 10
-	win.Y = 5
+	chatWin := tui.NewWindow(m.wizard.Results.Name, m.wizard.Results.Name, chat)
+	chatWin.Width = 60
+	chatWin.Height = 20
+	chatWin.X = 5
+	chatWin.Y = 2
 	
-	m.manager.AddWindow(win)
+	m.manager.AddWindow(chatWin)
+
+	// 2. Document Preview Window (The Stage)
+	doc := tui.NewDocumentModel("# Knowledge Base\n\nWelcome to your agent's knowledge base. You can upload documents here to ground your assistant in specific context.")
+	docWin := tui.NewWindow("stage", "The Stage", doc)
+	docWin.Width = 80
+	docWin.Height = 25
+	docWin.X = 70
+	docWin.Y = 5
 	
-	// Pass the actual current root dimensions to the initial resize
-	return func() tea.Msg {
-		return tea.WindowSizeMsg{Width: m.width, Height: m.height}
-	}
+	m.manager.AddWindow(docWin)
+	
+	return tea.Batch(
+		func() tea.Msg {
+			return tea.WindowSizeMsg{Width: chatWin.Width - 2, Height: chatWin.Height - 2}
+		},
+		// We'd ideally need a way to send the right size to each window's model
+		// but since we only have one ResizeMsg type, we'll need to handle it better in the future.
+		// For now, let's just trigger a generic update.
+	)
 }
 
 func main() {

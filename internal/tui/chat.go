@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -18,7 +19,14 @@ import (
 type chatResponseMsg struct {
 	Response string
 	Usage    interface{}
+	Sources  []Source
 	Error    error
+}
+
+type Source struct {
+	Content    string  `json:"content"`
+	DocumentID string  `json:"document_id"`
+	Score      float32 `json:"score"`
 }
 
 type ChatModel struct {
@@ -30,10 +38,11 @@ type ChatModel struct {
 	height    int
 	Focused   bool
 
-	// Temporary storage for agent config
+	// Agent config
 	Provider string
 	Model    string
 	APIKey   string
+	UseRAG   bool
 }
 
 func NewChatModel() *ChatModel {
@@ -94,6 +103,9 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.AddMessage(fmt.Sprintf("Error: %v", msg.Error))
 		} else {
 			m.AddMessage(fmt.Sprintf("AI: %s", msg.Response))
+			if len(msg.Sources) > 0 {
+				m.AddMessage(fmt.Sprintf(" (Sources: %d found)", len(msg.Sources)))
+			}
 		}
 	}
 
@@ -134,15 +146,26 @@ func (m *ChatModel) SetFocused(f bool) {
 
 func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 	return func() tea.Msg {
-		url := os.Getenv("GATEWAY_URL")
-		if url == "" {
-			url = "http://localhost:8090/api/v1/chat"
+		rawURL := os.Getenv("GATEWAY_URL")
+		var finalURL string
+		if rawURL == "" {
+			finalURL = "http://localhost:8090/api/v1/chat"
+		} else {
+			u, err := url.Parse(rawURL)
+			if err != nil {
+				return chatResponseMsg{Error: fmt.Errorf("invalid GATEWAY_URL: %w", err)}
+			}
+			if u.Path == "" || u.Path == "/" {
+				u.Path = "/api/v1/chat"
+			}
+			finalURL = u.String()
 		}
 		
-		payload := map[string]string{
+		payload := map[string]interface{}{
 			"provider": m.Provider,
 			"model":    m.Model,
 			"prompt":   prompt,
+			"use_rag":  m.UseRAG,
 		}
 		
 		jsonData, err := json.Marshal(payload)
@@ -150,20 +173,20 @@ func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 			return chatResponseMsg{Error: err}
 		}
 
-		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("POST", finalURL, bytes.NewBuffer(jsonData))
 		if err != nil {
 			return chatResponseMsg{Error: err}
 		}
 
 		req.Header.Set("Content-Type", "application/json")
-		// Use the API key if provided, or fallback to a default for local testing
-		apiKey := m.APIKey
+		
+		apiKey := os.Getenv("GATEWAY_API_KEY")
 		if apiKey == "" {
-			apiKey = "charming-secret-key"
+			return chatResponseMsg{Error: fmt.Errorf("GATEWAY_API_KEY environment variable is not set")}
 		}
 		req.Header.Set("X-Charming-Key", apiKey)
 
-		client := &http.Client{Timeout: 35 * time.Second} // Slightly longer than gateway timeout
+		client := &http.Client{Timeout: 35 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
 			return chatResponseMsg{Error: err}
@@ -181,6 +204,7 @@ func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 		var result struct {
 			Response string      `json:"response"`
 			Usage    interface{} `json:"usage"`
+			Sources  []Source    `json:"sources"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			return chatResponseMsg{Error: err}
@@ -189,6 +213,7 @@ func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 		return chatResponseMsg{
 			Response: result.Response,
 			Usage:    result.Usage,
+			Sources:  result.Sources,
 		}
 	}
 }

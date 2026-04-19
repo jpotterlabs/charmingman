@@ -6,23 +6,32 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
 type Querier interface {
-	CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent, error)
+	CreateAgent(ctx context.Context, arg CreateAgentParams) (CreateAgentRow, error)
+	CreateDocument(ctx context.Context, arg CreateDocumentParams) (Document, error)
+	CreateDocumentChunk(ctx context.Context, arg CreateDocumentChunkParams) (DocumentChunk, error)
 	CreateMessage(ctx context.Context, arg CreateMessageParams) (Message, error)
 	CreateRoom(ctx context.Context, arg CreateRoomParams) (Room, error)
 	DeleteAgent(ctx context.Context, id string) error
+	DeleteDocument(ctx context.Context, id string) error
 	DeleteRoom(ctx context.Context, id string) error
-	GetAgent(ctx context.Context, id string) (Agent, error)
+	GetAgent(ctx context.Context, id string) (GetAgentRow, error)
+	GetAgentSecret(ctx context.Context, id string) (sql.NullString, error)
+	GetChunk(ctx context.Context, id string) (DocumentChunk, error)
+	GetDocument(ctx context.Context, id string) (Document, error)
 	GetRoom(ctx context.Context, id string) (Room, error)
 	GetTotalUsage(ctx context.Context) (GetTotalUsageRow, error)
-	ListAgents(ctx context.Context) ([]Agent, error)
+	ListAgents(ctx context.Context) ([]ListAgentsRow, error)
+	ListChunksByDocument(ctx context.Context, documentID string) ([]DocumentChunk, error)
+	ListDocuments(ctx context.Context) ([]Document, error)
 	ListMessagesByRoom(ctx context.Context, roomID string) ([]Message, error)
 	ListRooms(ctx context.Context) ([]Room, error)
 	ListUsageLogs(ctx context.Context, arg ListUsageLogsParams) ([]UsageLog, error)
 	LogUsage(ctx context.Context, arg LogUsageParams) (UsageLog, error)
-	UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Agent, error)
+	UpdateAgent(ctx context.Context, arg UpdateAgentParams) (UpdateAgentRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

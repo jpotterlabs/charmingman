@@ -15,6 +15,7 @@ require (
 	cloud.google.com/go/auth v0.20.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
+	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.5 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.8 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.32.14 // indirect
@@ -62,6 +63,7 @@ require (
 	github.com/kaptinlin/jsonschema v0.7.7 // indirect
 	github.com/kaptinlin/messageformat-go v0.4.19 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
+	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
@@ -69,7 +71,12 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/ncruces/go-sqlite3 v0.22.0 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
+	github.com/oapi-codegen/runtime v1.1.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
+	github.com/philippgille/gokv/encoding v0.7.0 // indirect
+	github.com/philippgille/gokv/gomap v0.7.0 // indirect
+	github.com/philippgille/gokv/util v0.7.0 // indirect
+	github.com/pinecone-io/go-pinecone v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/pressly/goose/v3 v3.24.1 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
@@ -99,6 +106,7 @@ require (
 	golang.org/x/text v0.35.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/api v0.275.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260406210006-6f92a3bedf2d // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260406210006-6f92a3bedf2d // indirect
 	google.golang.org/grpc v1.80.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect

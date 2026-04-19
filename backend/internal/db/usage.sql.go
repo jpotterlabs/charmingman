@@ -12,16 +12,16 @@ import (
 
 const getTotalUsage = `-- name: GetTotalUsage :one
 SELECT
-    SUM(total_tokens) as total_tokens,
-    SUM(cost) as total_cost,
+    COALESCE(SUM(total_tokens), 0) as total_tokens,
+    COALESCE(SUM(cost), 0.0) as total_cost,
     COUNT(*) as total_requests
 FROM usage_log
 `
 
 type GetTotalUsageRow struct {
-	TotalTokens   sql.NullFloat64 `json:"total_tokens"`
-	TotalCost     sql.NullFloat64 `json:"total_cost"`
-	TotalRequests int64           `json:"total_requests"`
+	TotalTokens   interface{} `json:"total_tokens"`
+	TotalCost     interface{} `json:"total_cost"`
+	TotalRequests int64       `json:"total_requests"`
 }
 
 func (q *Queries) GetTotalUsage(ctx context.Context) (GetTotalUsageRow, error) {
@@ -33,7 +33,7 @@ func (q *Queries) GetTotalUsage(ctx context.Context) (GetTotalUsageRow, error) {
 
 const listUsageLogs = `-- name: ListUsageLogs :many
 SELECT id, provider, model, prompt_tokens, completion_tokens, total_tokens, latency_ms, cost, timestamp FROM usage_log
-ORDER BY timestamp DESC
+ORDER BY timestamp DESC, id DESC
 LIMIT ? OFFSET ?
 `
 

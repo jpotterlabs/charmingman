@@ -19,6 +19,22 @@ type Agent struct {
 	UpdatedAt sql.NullTime   `json:"updated_at"`
 }
 
+type Document struct {
+	ID        string       `json:"id"`
+	Title     string       `json:"title"`
+	Filename  string       `json:"filename"`
+	CreatedAt sql.NullTime `json:"created_at"`
+	UpdatedAt sql.NullTime `json:"updated_at"`
+}
+
+type DocumentChunk struct {
+	ID         string       `json:"id"`
+	DocumentID string       `json:"document_id"`
+	Content    string       `json:"content"`
+	ChunkIndex int64        `json:"chunk_index"`
+	CreatedAt  sql.NullTime `json:"created_at"`
+}
+
 type Message struct {
 	ID         string         `json:"id"`
 	RoomID     string         `json:"room_id"`
