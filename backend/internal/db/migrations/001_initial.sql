@@ -7,6 +7,7 @@ CREATE TABLE agents (
     provider TEXT NOT NULL,
     persona TEXT,
     api_key_ref TEXT, -- Reference to secret manager or encrypted store
+    use_rag BOOLEAN NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

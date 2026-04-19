@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"strings"
 
@@ -48,7 +49,9 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 
 	if req.UseRAG && h.documentService != nil {
 		results, err := h.documentService.Search(c.Request.Context(), req.Prompt, 3)
-		if err == nil && len(results) > 0 {
+		if err != nil {
+			log.Printf("Error during RAG search for prompt %q: %v", req.Prompt, err)
+		} else if len(results) > 0 {
 			sources = results
 			var contextBuilder strings.Builder
 			contextBuilder.WriteString("Use the following pieces of context to answer the user's question. If you don't know the answer, just say that you don't know, don't try to make up an answer.\n\n")

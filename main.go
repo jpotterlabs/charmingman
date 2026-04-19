@@ -48,6 +48,7 @@ func (m rootModel) Init() tea.Cmd {
 }
 
 func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Capture window size updates regardless of state
 	if msg, ok := msg.(tea.WindowSizeMsg); ok {
 		m.width = msg.Width
 		m.height = msg.Height
@@ -106,6 +107,7 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							break
 						}
 					}
+					// Focus next window
 					nextIdx := (focusedIdx + 1) % len(m.manager.Windows)
 					m.manager.FocusWindow(m.manager.Windows[nextIdx].ID)
 				}
@@ -147,6 +149,7 @@ func (m rootModel) saveAgent() tea.Cmd {
 			rawURL = "http://localhost:8090"
 		}
 
+		// Normalize URL to /api/v1/agents
 		baseURL := strings.TrimRight(rawURL, "/")
 		baseURL = strings.TrimSuffix(baseURL, "/api/v1/chat")
 		baseURL = strings.TrimSuffix(baseURL, "/api/v1/agents")
@@ -158,6 +161,7 @@ func (m rootModel) saveAgent() tea.Cmd {
 			finalURL = "http://" + finalURL
 		}
 
+		// Map model names to providers for the backend
 		provider := "openai"
 		model := m.wizard.Results.Model
 		switch {
@@ -252,13 +256,28 @@ func (m rootModel) initDashboard() tea.Cmd {
 	
 	m.manager.AddWindow(docWin)
 	
+	// Create individual WindowSizeMsg commands for each window's sub-model
 	return tea.Batch(
 		func() tea.Msg {
-			return tea.WindowSizeMsg{Width: chatWin.Width - 2, Height: chatWin.Height - 2}
+			// Calculate content area for chatWin
+			return tui.WindowMsg{
+				ID: chatWin.ID,
+				Msg: tea.WindowSizeMsg{
+					Width:  chatWin.Width - 2,
+					Height: chatWin.Height - 2,
+				},
+			}
 		},
-		// We'd ideally need a way to send the right size to each window's model
-		// but since we only have one ResizeMsg type, we'll need to handle it better in the future.
-		// For now, let's just trigger a generic update.
+		func() tea.Msg {
+			// Calculate content area for docWin
+			return tui.WindowMsg{
+				ID: docWin.ID,
+				Msg: tea.WindowSizeMsg{
+					Width:  docWin.Width - 2,
+					Height: docWin.Height - 2,
+				},
+			}
+		},
 	)
 }
 

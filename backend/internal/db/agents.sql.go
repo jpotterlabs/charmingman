@@ -12,11 +12,11 @@ import (
 
 const createAgent = `-- name: CreateAgent :one
 INSERT INTO agents (
-    id, name, model, provider, persona, api_key_ref
+    id, name, model, provider, persona, api_key_ref, use_rag
 ) VALUES (
-    ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?
 )
-RETURNING id, name, model, provider, persona, created_at, updated_at
+RETURNING id, name, model, provider, persona, use_rag, created_at, updated_at
 `
 
 type CreateAgentParams struct {
@@ -26,6 +26,7 @@ type CreateAgentParams struct {
 	Provider  string         `json:"provider"`
 	Persona   sql.NullString `json:"persona"`
 	ApiKeyRef sql.NullString `json:"api_key_ref"`
+	UseRag    bool           `json:"use_rag"`
 }
 
 type CreateAgentRow struct {
@@ -34,6 +35,7 @@ type CreateAgentRow struct {
 	Model     string         `json:"model"`
 	Provider  string         `json:"provider"`
 	Persona   sql.NullString `json:"persona"`
+	UseRag    bool           `json:"use_rag"`
 	CreatedAt sql.NullTime   `json:"created_at"`
 	UpdatedAt sql.NullTime   `json:"updated_at"`
 }
@@ -46,6 +48,7 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Creat
 		arg.Provider,
 		arg.Persona,
 		arg.ApiKeyRef,
+		arg.UseRag,
 	)
 	var i CreateAgentRow
 	err := row.Scan(
@@ -54,6 +57,7 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Creat
 		&i.Model,
 		&i.Provider,
 		&i.Persona,
+		&i.UseRag,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -71,7 +75,7 @@ func (q *Queries) DeleteAgent(ctx context.Context, id string) error {
 }
 
 const getAgent = `-- name: GetAgent :one
-SELECT id, name, model, provider, persona, created_at, updated_at
+SELECT id, name, model, provider, persona, use_rag, created_at, updated_at
 FROM agents
 WHERE id = ? LIMIT 1
 `
@@ -82,6 +86,7 @@ type GetAgentRow struct {
 	Model     string         `json:"model"`
 	Provider  string         `json:"provider"`
 	Persona   sql.NullString `json:"persona"`
+	UseRag    bool           `json:"use_rag"`
 	CreatedAt sql.NullTime   `json:"created_at"`
 	UpdatedAt sql.NullTime   `json:"updated_at"`
 }
@@ -95,6 +100,7 @@ func (q *Queries) GetAgent(ctx context.Context, id string) (GetAgentRow, error) 
 		&i.Model,
 		&i.Provider,
 		&i.Persona,
+		&i.UseRag,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -114,7 +120,7 @@ func (q *Queries) GetAgentSecret(ctx context.Context, id string) (sql.NullString
 }
 
 const listAgents = `-- name: ListAgents :many
-SELECT id, name, model, provider, persona, created_at, updated_at
+SELECT id, name, model, provider, persona, use_rag, created_at, updated_at
 FROM agents
 ORDER BY name
 `
@@ -125,6 +131,7 @@ type ListAgentsRow struct {
 	Model     string         `json:"model"`
 	Provider  string         `json:"provider"`
 	Persona   sql.NullString `json:"persona"`
+	UseRag    bool           `json:"use_rag"`
 	CreatedAt sql.NullTime   `json:"created_at"`
 	UpdatedAt sql.NullTime   `json:"updated_at"`
 }
@@ -144,6 +151,7 @@ func (q *Queries) ListAgents(ctx context.Context) ([]ListAgentsRow, error) {
 			&i.Model,
 			&i.Provider,
 			&i.Persona,
+			&i.UseRag,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -166,10 +174,11 @@ SET name = ?,
     model = ?,
     provider = ?,
     persona = ?,
-    api_key_ref = ?,
+    api_key_ref = COALESCE(?7, api_key_ref),
+    use_rag = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, name, model, provider, persona, created_at, updated_at
+RETURNING id, name, model, provider, persona, use_rag, created_at, updated_at
 `
 
 type UpdateAgentParams struct {
@@ -178,6 +187,7 @@ type UpdateAgentParams struct {
 	Provider  string         `json:"provider"`
 	Persona   sql.NullString `json:"persona"`
 	ApiKeyRef sql.NullString `json:"api_key_ref"`
+	UseRag    bool           `json:"use_rag"`
 	ID        string         `json:"id"`
 }
 
@@ -187,6 +197,7 @@ type UpdateAgentRow struct {
 	Model     string         `json:"model"`
 	Provider  string         `json:"provider"`
 	Persona   sql.NullString `json:"persona"`
+	UseRag    bool           `json:"use_rag"`
 	CreatedAt sql.NullTime   `json:"created_at"`
 	UpdatedAt sql.NullTime   `json:"updated_at"`
 }
@@ -198,6 +209,7 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Updat
 		arg.Provider,
 		arg.Persona,
 		arg.ApiKeyRef,
+		arg.UseRag,
 		arg.ID,
 	)
 	var i UpdateAgentRow
@@ -207,6 +219,7 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Updat
 		&i.Model,
 		&i.Provider,
 		&i.Persona,
+		&i.UseRag,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

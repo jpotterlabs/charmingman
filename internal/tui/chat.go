@@ -104,7 +104,22 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.AddMessage(fmt.Sprintf("AI: %s", msg.Response))
 			if len(msg.Sources) > 0 {
-				m.AddMessage(fmt.Sprintf(" (Sources: %d found)", len(msg.Sources)))
+				m.AddMessage("Sources:")
+				// Show top 3 sources
+				limit := len(msg.Sources)
+				if limit > 3 {
+					limit = 3
+				}
+				for i := 0; i < limit; i++ {
+					s := msg.Sources[i]
+					m.AddMessage(fmt.Sprintf("  [%d] Doc: %s (Score: %.2f)", i+1, s.DocumentID, s.Score))
+					// Snippet (first 100 chars)
+					snippet := s.Content
+					if len(snippet) > 100 {
+						snippet = snippet[:97] + "..."
+					}
+					m.AddMessage(fmt.Sprintf("      \"%s\"", snippet))
+				}
 			}
 		}
 	}
@@ -151,13 +166,26 @@ func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 		if rawURL == "" {
 			finalURL = "http://localhost:8090/api/v1/chat"
 		} else {
+			// Ensure scheme exists
+			if !strings.Contains(rawURL, "://") {
+				rawURL = "http://" + rawURL
+			}
 			u, err := url.Parse(rawURL)
 			if err != nil {
 				return chatResponseMsg{Error: fmt.Errorf("invalid GATEWAY_URL: %w", err)}
 			}
-			if u.Path == "" || u.Path == "/" {
-				u.Path = "/api/v1/chat"
+			if u.Host == "" {
+				return chatResponseMsg{Error: fmt.Errorf("invalid GATEWAY_URL: missing host")}
 			}
+			
+			// Normalize path
+			if u.Path == "" || u.Path == "/" || u.Path == "/api/v1" {
+				u.Path = "/api/v1/chat"
+			} else if !strings.HasSuffix(u.Path, "/chat") && !strings.HasSuffix(u.Path, "/chat/") {
+				// If it's something like /v1, append /chat
+				u.Path = strings.TrimRight(u.Path, "/") + "/chat"
+			}
+			
 			finalURL = u.String()
 		}
 		
@@ -186,7 +214,7 @@ func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 		}
 		req.Header.Set("X-Charming-Key", apiKey)
 
-		client := &http.Client{Timeout: 35 * time.Second}
+		client := &http.Client{Timeout: 35 * time.Second} // Slightly longer than gateway timeout
 		resp, err := client.Do(req)
 		if err != nil {
 			return chatResponseMsg{Error: err}

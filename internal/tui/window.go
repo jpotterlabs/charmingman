@@ -9,6 +9,12 @@ type Focusable interface {
 	SetFocused(bool)
 }
 
+// WindowMsg is a message routed to a specific window.
+type WindowMsg struct {
+	ID  string
+	Msg tea.Msg
+}
+
 // Window represents a single window in the TUI.
 type Window struct {
 	ID      string

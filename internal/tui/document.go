@@ -41,7 +41,9 @@ func (m *DocumentModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	m.viewport, cmd = m.viewport.Update(msg)
+	if m.ready {
+		m.viewport, cmd = m.viewport.Update(msg)
+	}
 	return m, cmd
 }
 

@@ -30,6 +30,15 @@ func (m *Manager) AddWindow(w *Window) {
 
 // Update handles messages for all windows.
 func (m *Manager) Update(msg tea.Msg) tea.Cmd {
+	if wMsg, ok := msg.(WindowMsg); ok {
+		for _, w := range m.Windows {
+			if w.ID == wMsg.ID {
+				return w.Update(wMsg.Msg)
+			}
+		}
+		return nil
+	}
+
 	var cmds []tea.Cmd
 	for _, w := range m.Windows {
 		cmd := w.Update(msg)

@@ -21,7 +21,7 @@ func ChunkText(text string, maxSize int, overlap int) []Chunk {
 	
 	for start := 0; start < len(text); {
 		end := start + maxSize
-		if end > len(text) {
+		if end >= len(text) {
 			end = len(text)
 		} else {
 			// Try to find a good breaking point (newline or space)
@@ -41,6 +41,10 @@ func ChunkText(text string, maxSize int, overlap int) []Chunk {
 			Index:   index,
 		})
 		index++
+
+		if end == len(text) {
+			break
+		}
 
 		start = end - overlap
 		if start < 0 {

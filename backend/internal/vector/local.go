@@ -29,6 +29,10 @@ func (s *LocalStore) Add(ctx context.Context, vectors []Vector) error {
 }
 
 func (s *LocalStore) Search(ctx context.Context, query []float32, limit int) ([]SearchResult, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -45,9 +49,10 @@ func (s *LocalStore) Search(ctx context.Context, query []float32, limit int) ([]
 		return results[i].Score > results[j].Score
 	})
 
-	if len(results) > limit {
-		results = results[:limit]
+	if limit > len(results) {
+		limit = len(results)
 	}
+	results = results[:limit]
 
 	return results, nil
 }

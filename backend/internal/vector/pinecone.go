@@ -72,6 +72,14 @@ func (s *PineconeStore) Add(ctx context.Context, vectors []Vector) error {
 }
 
 func (s *PineconeStore) Search(ctx context.Context, query []float32, limit int) ([]SearchResult, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	// Pinecone has a hard limit for TopK, but we'll also cap it reasonably
+	if limit > 10000 {
+		limit = 10000
+	}
+
 	idx, err := s.getIndexConn(ctx)
 	if err != nil {
 		return nil, err

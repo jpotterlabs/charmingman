@@ -3,6 +3,8 @@ package document
 import (
 	"context"
 	"fmt"
+	"log"
+	"path/filepath"
 
 	"charmingman/backend/internal/db"
 	"charmingman/backend/internal/vector"
@@ -10,35 +12,68 @@ import (
 )
 
 type DocumentService struct {
-	queries     *db.Queries
-	embedder    vector.Embedder
-	vectorStore vector.VectorStore
+	queries       *db.Queries
+	embedder      vector.Embedder
+	vectorStore   vector.VectorStore
+	documentsRoot string
 }
 
-func NewDocumentService(queries *db.Queries, embedder vector.Embedder, vectorStore vector.VectorStore) *DocumentService {
+func NewDocumentService(queries *db.Queries, embedder vector.Embedder, vectorStore vector.VectorStore, documentsRoot string) *DocumentService {
 	return &DocumentService{
-		queries:     queries,
-		embedder:    embedder,
-		vectorStore: vectorStore,
+		queries:       queries,
+		embedder:      embedder,
+		vectorStore:   vectorStore,
+		documentsRoot: documentsRoot,
 	}
 }
 
 func (s *DocumentService) AddDocument(ctx context.Context, title string, path string) (string, error) {
-	text, err := ExtractText(path)
+	// 1. Sanitize and validate path
+	cleanPath := filepath.Clean(path)
+	if filepath.IsAbs(cleanPath) {
+		return "", fmt.Errorf("absolute paths not allowed: %s", path)
+	}
+
+	absRoot, err := filepath.Abs(s.documentsRoot)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute root: %w", err)
+	}
+
+	fullPath := filepath.Join(absRoot, cleanPath)
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil || filepath.IsAbs(rel) || rel == ".." || (len(rel) > 2 && rel[:3] == "../") {
+		return "", fmt.Errorf("path escapes documents root: %s", path)
+	}
+
+	// 2. Extract text
+	text, err := ExtractText(absPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to extract text: %w", err)
 	}
 
+	// 3. Create initial DB record
 	docID := uuid.New().String()
 	_, err = s.queries.CreateDocument(ctx, db.CreateDocumentParams{
 		ID:       docID,
 		Title:    title,
-		Filename: path,
+		Filename: filepath.Base(cleanPath),
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to create document record: %w", err)
 	}
 
+	// Compensation logic: delete on failure
+	cleanup := func() {
+		log.Printf("Cleaning up failed document ingestion for docID: %s", docID)
+		_ = s.queries.DeleteDocument(context.Background(), docID)
+	}
+
+	// 4. Chunk and Embed
 	chunks := ChunkText(text, 1000, 200)
 	chunkTexts := make([]string, len(chunks))
 	for i, c := range chunks {
@@ -47,9 +82,16 @@ func (s *DocumentService) AddDocument(ctx context.Context, title string, path st
 
 	embeddings, err := s.embedder.EmbedBatch(ctx, chunkTexts)
 	if err != nil {
+		cleanup()
 		return "", fmt.Errorf("failed to generate embeddings: %w", err)
 	}
 
+	if len(embeddings) != len(chunks) {
+		cleanup()
+		return "", fmt.Errorf("embedding count mismatch: expected %d, got %d", len(chunks), len(embeddings))
+	}
+
+	// 5. Save chunks and vectors
 	vectors := make([]vector.Vector, len(chunks))
 	for i, c := range chunks {
 		chunkID := uuid.New().String()
@@ -60,6 +102,7 @@ func (s *DocumentService) AddDocument(ctx context.Context, title string, path st
 			ChunkIndex:  int64(c.Index),
 		})
 		if err != nil {
+			cleanup()
 			return "", fmt.Errorf("failed to save chunk %d: %w", i, err)
 		}
 
@@ -75,6 +118,7 @@ func (s *DocumentService) AddDocument(ctx context.Context, title string, path st
 
 	err = s.vectorStore.Add(ctx, vectors)
 	if err != nil {
+		cleanup()
 		return "", fmt.Errorf("failed to add vectors to store: %w", err)
 	}
 
@@ -98,15 +142,19 @@ func (s *DocumentService) Search(ctx context.Context, query string, limit int) (
 		return nil, fmt.Errorf("failed to search vector store: %w", err)
 	}
 
-	searchParams := make([]SearchResult, len(results))
+	searchParams := make([]SearchResult, 0, len(results))
 	for i, r := range results {
-		content, _ := r.Metadata["content"].(string)
-		docID, _ := r.Metadata["document_id"].(string)
-		searchParams[i] = SearchResult{
+		content, ok1 := r.Metadata["content"].(string)
+		docID, ok2 := r.Metadata["document_id"].(string)
+		if !ok1 || !ok2 {
+			log.Printf("Warning: malformed metadata for match %d (score: %f)", i, r.Score)
+			continue
+		}
+		searchParams = append(searchParams, SearchResult{
 			Content:    content,
 			DocumentID: docID,
 			Score:      r.Score,
-		}
+		} )
 	}
 
 	return searchParams, nil

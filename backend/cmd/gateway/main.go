@@ -25,6 +25,7 @@ type AgentResponse struct {
 	Model     string    `json:"model"`
 	Provider  string    `json:"provider"`
 	Persona   string    `json:"persona"`
+	UseRAG    bool      `json:"use_rag"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -36,6 +37,7 @@ func listRowToAgentResponse(a db.ListAgentsRow) AgentResponse {
 		Model:     a.Model,
 		Provider:  a.Provider,
 		Persona:   a.Persona.String,
+		UseRAG:    a.UseRag,
 		CreatedAt: a.CreatedAt.Time,
 		UpdatedAt: a.UpdatedAt.Time,
 	}
@@ -48,6 +50,7 @@ func createRowToAgentResponse(a db.CreateAgentRow) AgentResponse {
 		Model:     a.Model,
 		Provider:  a.Provider,
 		Persona:   a.Persona.String,
+		UseRAG:    a.UseRag,
 		CreatedAt: a.CreatedAt.Time,
 		UpdatedAt: a.UpdatedAt.Time,
 	}
@@ -93,8 +96,16 @@ func main() {
 	}
 
 	// Initialize Services
+	docRoot := os.Getenv("DOCUMENTS_ROOT")
+	if docRoot == "" {
+		docRoot = "./documents"
+	}
+	if err := os.MkdirAll(docRoot, 0755); err != nil {
+		log.Fatalf("Failed to create documents root: %v", err)
+	}
+
 	ps := provider.NewProviderService(queries)
-	docService := document.NewDocumentService(queries, embedder, vStore)
+	docService := document.NewDocumentService(queries, embedder, vStore, docRoot)
 
 	// Register providers from environment variables
 	if openaiKey != "" {
@@ -216,6 +227,7 @@ func main() {
 				Provider string `json:"provider" binding:"required"`
 				Persona  string `json:"persona"`
 				APIKey   string `json:"api_key"`
+				UseRAG   bool   `json:"use_rag"`
 			}
 			if err := c.ShouldBindJSON(&req); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -227,12 +239,13 @@ func main() {
 			}
 
 			agent, err := queries.CreateAgent(c.Request.Context(), db.CreateAgentParams{
-				ID:       req.ID,
-				Name:     req.Name,
-				Model:    req.Model,
-				Provider: req.Provider,
-				Persona:  sql.NullString{String: req.Persona, Valid: req.Persona != ""},
+				ID:        req.ID,
+				Name:      req.Name,
+				Model:     req.Model,
+				Provider:  req.Provider,
+				Persona:   sql.NullString{String: req.Persona, Valid: req.Persona != ""},
 				ApiKeyRef: sql.NullString{String: req.APIKey, Valid: req.APIKey != ""},
+				UseRag:    req.UseRAG,
 			})
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -259,7 +272,7 @@ func main() {
 
 			docID, err := docService.AddDocument(c.Request.Context(), req.Title, req.Path)
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
 
@@ -274,7 +287,14 @@ func main() {
 			}
 
 			limitStr := c.DefaultQuery("limit", "5")
-			limit, _ := strconv.Atoi(limitStr)
+			limit, err := strconv.Atoi(limitStr)
+			if err != nil || limit <= 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid limit. Must be a positive integer"})
+				return
+			}
+			if limit > 100 {
+				limit = 100
+			}
 
 			if embedder == nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "Embedder not initialized"})
