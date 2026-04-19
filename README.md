@@ -1,32 +1,28 @@
 # CharmingMan 🕶️
 
-**CharmingMan** is a sophisticated, multi-agent ChatTUI built exclusively on the **Charm** ecosystem. It provides a high-performance terminal interface for interacting with various LLM providers (OpenAI, Anthropic, Ollama, llama.cpp) and features a powerful RAG (Retrieval-Augmented Generation) pipeline, a revolutionary **Infinity Canvas**, and **Multimodal Voice Input**.
+**CharmingMan** is a sophisticated, multi-agent ChatTUI built exclusively on the **Charm** ecosystem. It provides a high-performance terminal interface for interacting with various LLM providers (OpenAI, Anthropic, Ollama, llama.cpp) and features a powerful spatial "Infinity Canvas" for orchestrating agent swarms.
 
 ## ✨ Features
 
-- **🧠 Multi-Agent Orchestration**: Create and manage multiple AI agents with distinct personas. Agents share a persistent **RoomID** context and can be routed using **@mentions**.
-- **🌌 Infinity Canvas**: A spatial workspace for your agents. Navigate a non-linear graph of thoughts with camera panning, zooming, and world-to-screen coordinate mapping.
-- **🎙️ Voice Input (Phase 5)**: Trigger hands-free interaction using the 'v' key. Integrated Whisper STT (Speech-to-Text) allows you to speak naturally to your agent swarm.
-- **📚 Knowledge & RAG**: Ground your agents in your own data. Upload and index PDFs, Markdown, and Text files with automated context injection.
-- **🖼️ "The Stage"**: A dedicated document preview window for inspecting RAG sources and AI-generated artifacts using `Glow`.
-- **🪟 YAML-Driven Layouts**: Define your workspace in `layout.yaml`. Features semantic validation, auto-rescaling for different terminal sizes, and draggable/resizable windows.
-- **🔌 Unified AI Gateway**: A backend service that abstracts provider differences, offering a single API with built-in security like prompt redaction and path-traversal protection.
-- **🛠️ Wizard-driven Setup**: Easily configure new agents and providers through an interactive `Huh?` wizard.
+- **🧠 [Multi-Agent Orchestration](./docs/features/MULTI_AGENT.md)**: Create and manage multiple AI agents with distinct personas. Use `@mentions` to route prompts and coordinate reasoning across your swarm.
+- **🌌 [Infinity Canvas](./docs/features/INFINITY_CANVAS.md)**: A dynamic, spatial layout engine. Pan and zoom across an infinite coordinate plane to organize your workspace.
+- **📚 [Knowledge & RAG](./docs/features/KNOWLEDGE_RAG.md)**: Ground your agents in your own data. Upload and index PDFs, Markdown, and Text files with automated chunking and vector storage (Pinecone/Local).
+- **🎙️ [Multimodal Suite](./docs/features/MULTIMODAL.md)**: Trigger voice recording in the TUI to prompt agents and listen to their responses via high-quality speech synthesis.
+- **🛠️ [MCP Tooling](./docs/features/MCP_TOOLS.md)**: Extend your agents with local capabilities like filesystem access, shell execution, and more via the Model Context Protocol.
+- **🔌 [Unified AI Gateway](./docs/features/AI_GATEWAY.md)**: A backend service that abstracts provider differences, offering a single API for all your models with persistent room history.
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Go 1.26 or higher.
-- **Audio Recording**: `sox` (the `rec` command) is required for TUI voice input.
-  - macOS: `brew install sox`
-  - Linux: `sudo apt-get install sox`
+- `sox` (required for voice features): `brew install sox` (macOS) or `sudo apt install sox` (Linux).
 - (Optional) [Ollama](https://ollama.ai/) for local model support.
 - (Optional) [Pinecone](https://www.pinecone.io/) account for managed vector storage.
 
 ### Installation
 1. Clone the repository:
    ```bash
-   git clone git@github.com:OWNER/REPO.git
+   git clone https://github.com/jpotterlabs/charmingman.git
    cd charmingman
    ```
 2. Install dependencies:
@@ -39,44 +35,43 @@
 Create a `.env` file in the `backend/` directory:
 ```env
 PORT=8090
-OPENAI_API_KEY=sk-...  # REQUIRED for Whisper STT and Embeddings
+GATEWAY_API_KEY=charming-secret-key
+OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=ant-...
 PINECONE_API_KEY=your-pinecone-key
 PINECONE_INDEX=your-index-name
 DOCUMENTS_ROOT=./documents
+MCP_SERVERS="npx @modelcontextprotocol/server-filesystem /path/to/docs"
 ```
 
 ### Running
 1. **Start the AI Gateway**:
    ```bash
-   cd backend
-   go run cmd/gateway/main.go
+   task run-backend
    ```
 2. **Launch the TUI** (in a new terminal):
    ```bash
-   go run main.go
+   task run-tui
    ```
-
-## 🎙️ Using Voice Input
-1. Ensure the AI Gateway is running with a valid `OPENAI_API_KEY`.
-2. In the TUI, press the **'v'** key to initiate recording.
-3. Speak your prompt (currently set to 3-second intervals for testing).
-4. The audio is automatically transcribed via Whisper and routed to the primary agent.
 
 ## 🛠️ Architecture
 
 CharmingMan is built with a layered architecture:
-- **Frontend**: `Bubble Tea`, `Lipgloss`, `Huh`, `Glow`, and a custom **Spatial Canvas Engine**.
-- **Middleware (AI Gateway)**: Go-based service using the `fantasy` library for provider abstraction and multi-agent routing.
-- **Backend (Intelligence Engine)**: SQLite for persistence, Pinecone/Local for vector storage, and a custom RAG pipeline with deep-copy mutation safety.
+- **Frontend**: `Bubble Tea v2`, `Lipgloss v2`, `Huh v2`. Features a custom compositor for spatial rendering.
+- **Middleware (AI Gateway)**: Go-based service using the `fantasy` library for provider abstraction.
+- **Backend (Intelligence Engine)**: SQLite for persistence, Pinecone/Local for vector storage, and a custom document processing pipeline.
 
-## 🗺️ Roadmap
-- [x] Phase 1: AI Gateway & TUI Architecture
-- [x] Phase 2: Persistence & Local SQLite
-- [x] Phase 3: Intelligence & Knowledge (RAG)
-- [x] Phase 4: Advanced TUI & Infinity Canvas (Swarms, @Mentions, Layouts)
-- [x] Phase 5: Voice & Multimedia (Whisper/STT)
-- [ ] Phase 6: TTS & MCP (Local Tool Calling)
+## 📖 Documentation
+
+For detailed information on each system, see our feature guides:
+- [AI Gateway Guide](./docs/features/AI_GATEWAY.md)
+- [Multi-Agent Guide](./docs/features/MULTI_AGENT.md)
+- [Infinity Canvas Guide](./docs/features/INFINITY_CANVAS.md)
+- [Knowledge & RAG Guide](./docs/features/KNOWLEDGE_RAG.md)
+- [Multimodal Guide](./docs/features/MULTIMODAL.md)
+- [MCP Tools Guide](./docs/features/MCP_TOOLS.md)
+- [Testing Strategy](./TESTING.md)
+- [Developer Diary](./DEVELOPMENT.md)
 
 ---
 Built with ❤️ using [Charm](https://charm.sh/).

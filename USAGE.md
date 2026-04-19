@@ -1,65 +1,57 @@
-# CharmingMan Usage Guide 🎩
+# User Guide: Interacting with your Swarm
 
-This guide provides a walkthrough for using the **CharmingMan** multi-agent swarm, including text and voice-based interactions.
+CharmingMan is a multi-agent environment where you can coordinate several AI assistants at once. This guide covers how to use the TUI features effectively.
 
-## 🎙️ Voice Input (The 'v' Key)
+## 🌌 Canvas Navigation
 
-The most advanced feature of CharmingMan is hands-free interaction via **Whisper STT**.
+Explore your spatial workspace using these shortcuts:
 
-### 1. Prerequisites for Voice
-To use voice input, ensure you have the following:
-- **Audio Recorder**: `sox` must be installed on your system.
-    - macOS: `brew install sox`
-    - Ubuntu/Debian: `sudo apt-get install sox`
-- **Whisper API Key**: The AI Gateway must be configured with a valid `OPENAI_API_KEY` in its `.env` file.
+| Command | Action |
+|---------|--------|
+| **Arrow Keys** | Pan the camera (move the viewport) |
+| **Drag Background** | Pan the camera (using left mouse) |
+| **`+` / `-`** | Zoom in or out |
+| **`0`** | Reset camera and zoom |
+| **`Tab`** | Cycle focus between open windows |
+| **Drag Title Bar**| Move a window around the canvas |
+| **Drag Corner** | Resize a window (bottom-right handle) |
 
-### 2. Using Voice in the TUI
-- **Activate Recording**: While in the Chat or Infinity Canvas view, press the **'v'** key.
-- **Recording Duration**: The system will record for **3 seconds** (current default for testing). A spinner will appear to indicate recording is in progress.
-- **Auto-Transcription**: Once finished, the audio is sent to the AI Gateway's `/api/v1/transcribe` endpoint.
-- **Automatic Routing**: The transcribed text is automatically routed to the primary agent as a new prompt.
+## 💬 Multi-Agent Interaction
 
----
+### Direct Prompts
+To talk to the focused agent, just type in the input field and press `Enter`.
 
-## 💬 Multi-Agent Swarm Interaction
+### @Mentions
+You can trigger *any* agent from *any* input field by using an `@mention`.
+- **Syntax**: `@AgentName your message`
+- **Example**: `@Alice what do you think of this?`
 
-CharmingMan allows you to coordinate multiple AI agents simultaneously within a shared context.
+The message will be routed specifically to Alice, even if you are currently focused on a different agent's window.
 
-### 1. @Mention Routing
-You can direct messages to specific agents using the `@Name` syntax:
-- `@Architect How should I structure this Go project?`
-- `@Coder Implement a Bubble Tea model for the home screen.`
+### Shared History
+All agents in your room see each other's responses. You can have one agent plan a task and another agent review that plan automatically.
 
-If no mention is used, the message is sent to the **primary agent** (usually the first one created).
+## 🎙️ Voice & Speech
 
-### 2. Shared Room Context
-All agents in a session share a **RoomID**. This means:
-- Agents are aware of previous messages from both you and other agents.
-- You can say: `@Coder Look at what the @Architect said and implement the first step.`
+### Voice Input (STT)
+1. Ensure `sox` is installed on your system.
+2. Press `'v'` in the TUI to start recording.
+3. Speak your prompt. Transcription will begin automatically after 3 seconds.
+4. The transcribed text will be routed to your primary agent.
 
-### 3. Navigation Controls
-- **TAB**: Cycle focus between active agent panes.
-- **Mouse Drag**: Move agent windows anywhere on the **Infinity Canvas**.
-- **Ctrl+Scroll / +/-**: Zoom the camera in and out of the canvas.
-- **Arrow Keys / WASD**: Pan the camera across the workspace.
+### Agent Speech (TTS)
+1. Ensure `sox` is installed on your system.
+2. Focus on an agent's response in the chat history.
+3. Press `'s'` to generate and play audio for that response.
 
----
+## 🛠️ MCP Tools
+
+View your available agent capabilities in the **Tool Belt** window.
+- Agents can automatically decide to use these tools (e.g., searching a filesystem) based on your prompt.
+- Press `'r'` in the Tool Belt window to refresh the tool list from the AI Gateway.
 
 ## 📚 Grounding with RAG
 
-To make your agents smarter, provide them with your own data:
-1. Place your documents (`.pdf`, `.md`, `.txt`) in the `documents/` directory.
-2. The AI Gateway will automatically chunk and index these files.
-3. In your prompt, use the `-rag` flag (or enable RAG in the agent settings) to trigger context injection:
-   - `Explain the project structure -rag`
-
----
-
-## 🛠️ Configuration Recap
-
-| Feature | Key Requirement |
-|---------|-----------------|
-| **Voice Input** | `sox` installed + `OPENAI_API_KEY` |
-| **RAG** | `OPENAI_API_KEY` (for embeddings) |
-| **Claude Models** | `ANTHROPIC_API_KEY` |
-| **Local Models** | Ollama running on `localhost:11434` |
+Agents can use documents you've uploaded to provide more accurate answers.
+- The chat history will indicate when sources were found: `(Sources: 3 found)`.
+- Use **"The Stage"** window to preview document content and RAG snippets.
