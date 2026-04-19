@@ -50,7 +50,12 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 	if req.UseRAG && h.documentService != nil {
 		results, err := h.documentService.Search(c.Request.Context(), req.Prompt, 3)
 		if err != nil {
-			log.Printf("Error during RAG search for prompt %q: %v", req.Prompt, err)
+			// Redact prompt in logs to avoid leaking sensitive data
+			safePrompt := req.Prompt
+			if len(safePrompt) > 20 {
+				safePrompt = safePrompt[:20] + "..."
+			}
+			log.Printf("Error during RAG search for prompt %q (len: %d): %v", safePrompt, len(req.Prompt), err)
 		} else if len(results) > 0 {
 			sources = results
 			var contextBuilder strings.Builder

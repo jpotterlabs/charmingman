@@ -80,6 +80,8 @@ func main() {
 	openaiKey := os.Getenv("OPENAI_API_KEY")
 	if openaiKey != "" {
 		embedder = vector.NewOpenAIEmbedder(openaiKey, "")
+	} else {
+		log.Println("Warning: OPENAI_API_KEY not configured. RAG and embeddings will be disabled.")
 	}
 
 	var vStore vector.VectorStore = vector.NewLocalStore()
@@ -93,6 +95,8 @@ func main() {
 			vStore = ps
 			log.Println("Pinecone vector store initialized")
 		}
+	} else if pineconeKey == "" {
+		log.Println("Note: PINECONE_API_KEY not configured. Using local in-memory vector store.")
 	}
 
 	// Initialize Services
@@ -256,6 +260,9 @@ func main() {
 
 		// Document Endpoints
 		v1.POST("/documents", func(c *gin.Context) {
+			// Add request body size limit
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1024*10) // 1KB limit for JSON metadata
+
 			var req struct {
 				Title string `json:"title" binding:"required"`
 				Path  string `json:"path" binding:"required"`

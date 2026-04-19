@@ -3,6 +3,8 @@ package vector
 import (
 	"context"
 	"math"
+	"maps"
+	"slices"
 	"sort"
 	"sync"
 )
@@ -23,7 +25,15 @@ func (s *LocalStore) Add(ctx context.Context, vectors []Vector) error {
 	defer s.mu.Unlock()
 
 	for _, v := range vectors {
-		s.vectors[v.ID] = v
+		// Deep copy to avoid leaking internal state
+		copiedValues := slices.Clone(v.Values)
+		copiedMetadata := maps.Clone(v.Metadata)
+		
+		s.vectors[v.ID] = Vector{
+			ID:       v.ID,
+			Values:   copiedValues,
+			Metadata: copiedMetadata,
+		}
 	}
 	return nil
 }
@@ -39,8 +49,17 @@ func (s *LocalStore) Search(ctx context.Context, query []float32, limit int) ([]
 	results := make([]SearchResult, 0, len(s.vectors))
 	for _, v := range s.vectors {
 		score := cosineSimilarity(query, v.Values)
+		
+		// Deep copy result to avoid leaking internal state
+		copiedValues := slices.Clone(v.Values)
+		copiedMetadata := maps.Clone(v.Metadata)
+
 		results = append(results, SearchResult{
-			Vector: v,
+			Vector: Vector{
+				ID:       v.ID,
+				Values:   copiedValues,
+				Metadata: copiedMetadata,
+			},
 			Score:  score,
 		})
 	}

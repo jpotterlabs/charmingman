@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"charmingman/backend/internal/db"
 	"charmingman/backend/internal/vector"
@@ -30,10 +32,7 @@ func NewDocumentService(queries *db.Queries, embedder vector.Embedder, vectorSto
 func (s *DocumentService) AddDocument(ctx context.Context, title string, path string) (string, error) {
 	// 1. Sanitize and validate path
 	cleanPath := filepath.Clean(path)
-	if filepath.IsAbs(cleanPath) {
-		return "", fmt.Errorf("absolute paths not allowed: %s", path)
-	}
-
+	
 	absRoot, err := filepath.Abs(s.documentsRoot)
 	if err != nil {
 		return "", fmt.Errorf("failed to get absolute root: %w", err)
@@ -46,17 +45,26 @@ func (s *DocumentService) AddDocument(ctx context.Context, title string, path st
 	}
 
 	rel, err := filepath.Rel(absRoot, absPath)
-	if err != nil || filepath.IsAbs(rel) || rel == ".." || (len(rel) > 2 && rel[:3] == "../") {
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("path escapes documents root: %s", path)
 	}
 
-	// 2. Extract text
+	// 2. Enforce per-file extraction limit (e.g. 10MB)
+	fileInfo, err := os.Stat(absPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to stat file: %w", err)
+	}
+	if fileInfo.Size() > 10*1024*1024 {
+		return "", fmt.Errorf("file too large for extraction (limit 10MB)")
+	}
+
+	// 3. Extract text
 	text, err := ExtractText(absPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to extract text: %w", err)
 	}
 
-	// 3. Create initial DB record
+	// 4. Create initial DB record
 	docID := uuid.New().String()
 	_, err = s.queries.CreateDocument(ctx, db.CreateDocumentParams{
 		ID:       docID,
@@ -67,13 +75,22 @@ func (s *DocumentService) AddDocument(ctx context.Context, title string, path st
 		return "", fmt.Errorf("failed to create document record: %w", err)
 	}
 
-	// Compensation logic: delete on failure
+	// Collected IDs for compensation
+	var chunkIDs []string
+
+	// Compensation logic: delete from DB and Vector Store on failure
 	cleanup := func() {
 		log.Printf("Cleaning up failed document ingestion for docID: %s", docID)
 		_ = s.queries.DeleteDocument(context.Background(), docID)
+		if len(chunkIDs) > 0 {
+			err := s.vectorStore.Delete(context.Background(), chunkIDs)
+			if err != nil {
+				log.Printf("Warning: failed to delete orphaned vectors for docID %s: %v", docID, err)
+			}
+		}
 	}
 
-	// 4. Chunk and Embed
+	// 5. Chunk and Embed
 	chunks := ChunkText(text, 1000, 200)
 	chunkTexts := make([]string, len(chunks))
 	for i, c := range chunks {
@@ -91,10 +108,11 @@ func (s *DocumentService) AddDocument(ctx context.Context, title string, path st
 		return "", fmt.Errorf("embedding count mismatch: expected %d, got %d", len(chunks), len(embeddings))
 	}
 
-	// 5. Save chunks and vectors
+	// 6. Save chunks and vectors
 	vectors := make([]vector.Vector, len(chunks))
 	for i, c := range chunks {
 		chunkID := uuid.New().String()
+		chunkIDs = append(chunkIDs, chunkID)
 		_, err = s.queries.CreateDocumentChunk(ctx, db.CreateDocumentChunkParams{
 			ID:          chunkID,
 			DocumentID:  docID,
@@ -144,6 +162,10 @@ func (s *DocumentService) Search(ctx context.Context, query string, limit int) (
 
 	searchParams := make([]SearchResult, 0, len(results))
 	for i, r := range results {
+		if r.Metadata == nil {
+			log.Printf("Warning: nil metadata for match %d (score: %f)", i, r.Score)
+			continue
+		}
 		content, ok1 := r.Metadata["content"].(string)
 		docID, ok2 := r.Metadata["document_id"].(string)
 		if !ok1 || !ok2 {

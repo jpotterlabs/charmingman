@@ -113,10 +113,12 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				for i := 0; i < limit; i++ {
 					s := msg.Sources[i]
 					m.AddMessage(fmt.Sprintf("  [%d] Doc: %s (Score: %.2f)", i+1, s.DocumentID, s.Score))
-					// Snippet (first 100 chars)
-					snippet := s.Content
-					if len(snippet) > 100 {
-						snippet = snippet[:97] + "..."
+					
+					// Rune-aware truncation for snippet
+					runes := []rune(s.Content)
+					snippet := string(runes)
+					if len(runes) > 100 {
+						snippet = string(runes[:97]) + "..."
 					}
 					m.AddMessage(fmt.Sprintf("      \"%s\"", snippet))
 				}

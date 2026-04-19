@@ -12,6 +12,20 @@ type Chunk struct {
 
 // ChunkText splits a large string into smaller chunks with overlap.
 func ChunkText(text string, maxSize int, overlap int) []Chunk {
+	// 1. Validate and sanitize inputs
+	if maxSize <= 0 {
+		maxSize = len(text)
+		if maxSize == 0 {
+			maxSize = 1
+		}
+	}
+	if overlap < 0 {
+		overlap = 0
+	}
+	if overlap >= maxSize {
+		overlap = maxSize - 1
+	}
+
 	if len(text) <= maxSize {
 		return []Chunk{{Content: text, Index: 0}}
 	}
@@ -50,7 +64,7 @@ func ChunkText(text string, maxSize int, overlap int) []Chunk {
 		if start < 0 {
 			start = 0
 		}
-		// Guard against infinite loop if maxSize is too small for overlap
+		// Guard against infinite loop if maxSize is too small for overlap (redundant now but safe)
 		if start <= (end - maxSize) {
 			start = end
 		}
