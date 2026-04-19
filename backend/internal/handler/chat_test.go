@@ -14,6 +14,7 @@ import (
 	"charmingman/backend/internal/vector"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHandleChat_BadRequest(t *testing.T) {
@@ -149,13 +150,14 @@ func TestHandleChat_RAGContextInjection(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, http.StatusOK, w.Code)
 	var resp ChatResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	err = json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
 
 	// Check if RAG sources are returned
-	assert.Len(t, resp.Sources, 1)
-	assert.Equal(t, "This is relevant RAG context.", resp.Sources[0].Content)
+	require.Len(t, resp.Sources, 1)
+	require.Equal(t, "This is relevant RAG context.", resp.Sources[0].Content)
 
 	// Check if prompt was injected
 	assert.Contains(t, resp.Response, "Use the following pieces of context to answer")

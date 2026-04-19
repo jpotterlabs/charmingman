@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"database/sql"
 	"log"
 	"net/http"
@@ -60,6 +59,14 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 	if req.RoomID != "" && h.queries != nil {
 		dbMsgs, err := h.queries.ListMessagesByRoom(c.Request.Context(), req.RoomID)
 		if err == nil {
+			// Cap history to last 20 messages to prevent huge model payloads
+			const maxHistoryMessages = 20
+			startIdx := 0
+			if len(dbMsgs) > maxHistoryMessages {
+				startIdx = len(dbMsgs) - maxHistoryMessages
+			}
+			dbMsgs = dbMsgs[startIdx:]
+
 			for _, m := range dbMsgs {
 				role := fantasy.MessageRole(m.Role)
 				history = append(history, fantasy.Message{
@@ -96,13 +103,19 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 
 	// 3. Persist User Message
 	if req.RoomID != "" && h.queries != nil {
-		_, _ = h.queries.CreateMessage(context.Background(), db.CreateMessageParams{
+		_, _ = h.queries.CreateMessage(c.Request.Context(), db.CreateMessageParams{
 			ID:      uuid.New().String(),
 			RoomID:  req.RoomID,
 			Role:    string(fantasy.MessageRoleUser),
 			Content: req.Prompt,
 		})
 	}
+
+	// 3.5. Append current prompt to history before calling provider
+	history = append(history, fantasy.Message{
+		Role:    fantasy.MessageRoleUser,
+		Content: []fantasy.MessagePart{fantasy.TextPart{Text: prompt}},
+	})
 
 	// 4. Call Model
 	res, err := h.providerService.Chat(c.Request.Context(), req.Provider, req.Model, prompt, history)
@@ -118,7 +131,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 	// 5. Persist Assistant Message
 	if req.RoomID != "" && h.queries != nil {
 		agentID := sql.NullString{String: req.AgentID, Valid: req.AgentID != ""}
-		_, _ = h.queries.CreateMessage(context.Background(), db.CreateMessageParams{
+		_, _ = h.queries.CreateMessage(c.Request.Context(), db.CreateMessageParams{
 			ID:         uuid.New().String(),
 			RoomID:     req.RoomID,
 			AgentID:    agentID,

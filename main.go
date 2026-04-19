@@ -270,7 +270,7 @@ func (m rootModel) initDashboardFromLayout() tea.Cmd {
 			chat.Model = winCfg.Config.Model
 			chat.UseRAG = winCfg.Config.UseRAG
 			chat.RoomID = m.roomID // Shared room ID
-			
+
 			if winCfg.ID == "primary-chat" {
 				chat.Model = m.wizard.Results.Model
 				chat.APIKey = m.wizard.Results.APIKey
@@ -298,18 +298,52 @@ func (m rootModel) initDashboardFromLayout() tea.Cmd {
 		}
 
 		win := tui.NewWindow(winCfg.ID, winCfg.Title, winModel)
-		win.X = winCfg.X
-		win.Y = winCfg.Y
-		win.Width = winCfg.Width
-		win.Height = winCfg.Height
-		
-		m.manager.AddWindow(win)
-		
+
+		// Handle relative coordinates (percentages) or bounds checking
+		x, y, width, height := winCfg.X, winCfg.Y, winCfg.Width, winCfg.Height
+
+		// If dimensions exceed terminal bounds, scale them down
+		if m.width > 0 && m.height > 0 {
+			if x+width > m.width {
+				if width > m.width-2 {
+					width = m.width - 2
+				}
+				if x+width > m.width {
+					x = m.width - width - 1
+				}
+			}
+			if y+height > m.height {
+				if height > m.height-2 {
+					height = m.height - 2
+				}
+				if y+height > m.height {
+					y = m.height - height - 1
+				}
+			}
+		}
+
+		win.X = x
+		win.Y = y
+		win.Width = width
+		win.Height = height
+
+		// Only focus if explicitly marked in config
+		m.manager.AddWindow(win, winCfg.Focused)
+
+		childW := width - 2
+		childH := height - 2
+		if childW < 0 {
+			childW = 0
+		}
+		if childH < 0 {
+			childH = 0
+		}
+
 		cmds = append(cmds, func(id string, w, h int) func() tea.Msg {
 			return func() tea.Msg {
-				return tui.WindowMsg{ID: id, Msg: tea.WindowSizeMsg{Width: w - 2, Height: h - 2}}
+				return tui.WindowMsg{ID: id, Msg: tea.WindowSizeMsg{Width: w, Height: h}}
 			}
-		}(winCfg.ID, win.Width, win.Height))
+		}(winCfg.ID, childW, childH))
 	}
 
 	return tea.Batch(cmds...)
@@ -321,7 +355,7 @@ func (m rootModel) initDashboardDefault() tea.Cmd {
 	chat.APIKey = m.wizard.Results.APIKey
 	chat.UseRAG = m.wizard.Results.UseRAG
 	chat.RoomID = m.roomID
-	
+
 	switch {
 	case strings.Contains(strings.ToLower(chat.Model), "gpt"):
 		chat.Provider = "openai"
@@ -334,45 +368,63 @@ func (m rootModel) initDashboardDefault() tea.Cmd {
 	}
 
 	chat.AddMessage(fmt.Sprintf("Agent %s initialized (Default Layout)", m.wizard.Results.Name))
-	
+
 	chatWin := tui.NewWindow("primary-chat", m.wizard.Results.Name, chat)
 	chatWin.X = 2
 	chatWin.Y = 1
 	chatWin.Width = 60
 	chatWin.Height = 20
-	
-	m.manager.AddWindow(chatWin)
-	
+
+	m.manager.AddWindow(chatWin, true)
+
+	childW := chatWin.Width - 2
+	childH := chatWin.Height - 2
+	if childW < 0 {
+		childW = 0
+	}
+	if childH < 0 {
+		childH = 0
+	}
+
 	return func() tea.Msg {
-		return tui.WindowMsg{ID: "primary-chat", Msg: tea.WindowSizeMsg{Width: chatWin.Width - 2, Height: chatWin.Height - 2}}
+		return tui.WindowMsg{ID: "primary-chat", Msg: tea.WindowSizeMsg{Width: childW, Height: childH}}
 	}
 }
 
 func (m rootModel) resizeDashboard() tea.Cmd {
 	var cmds []tea.Cmd
-	for _, w := range m.manager.Windows {
-		if w.X + w.Width > m.width {
-			if w.Width > m.width - 2 {
-				w.Width = m.width - 2
-			}
-			if w.X + w.Width > m.width {
-				w.X = m.width - w.Width - 1
-			}
+	for i := range m.manager.Windows {
+		w := m.manager.Windows[i]
+
+		// Only adjust Width and Height, not X and Y (don't clamp world coordinates)
+		newWidth := w.Width
+		newHeight := w.Height
+
+		if newWidth > m.width-2 {
+			newWidth = m.width - 2
 		}
-		if w.Y + w.Height > m.height {
-			if w.Height > m.height - 2 {
-				w.Height = m.height - 2
-			}
-			if w.Y + w.Height > m.height {
-				w.Y = m.height - w.Height - 1
-			}
+		if newHeight > m.height-2 {
+			newHeight = m.height - 2
 		}
-		
+
+		// Use index-based assignment to mutate actual windows
+		m.manager.Windows[i].Width = newWidth
+		m.manager.Windows[i].Height = newHeight
+
+		childW := newWidth - 2
+		childH := newHeight - 2
+		if childW < 0 {
+			childW = 0
+		}
+		if childH < 0 {
+			childH = 0
+		}
+
 		cmds = append(cmds, func(id string, width, height int) func() tea.Msg {
 			return func() tea.Msg {
-				return tui.WindowMsg{ID: id, Msg: tea.WindowSizeMsg{Width: width - 2, Height: height - 2}}
+				return tui.WindowMsg{ID: id, Msg: tea.WindowSizeMsg{Width: width, Height: height}}
 			}
-		}(w.ID, w.Width, w.Height))
+		}(w.ID, childW, childH))
 	}
 	return tea.Batch(cmds...)
 }

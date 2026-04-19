@@ -107,16 +107,23 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if len(parts) > 1 {
 							prompt = parts[1]
 						}
-						// Clear input and send RouteMsg to be handled by the manager
-						m.textinput.SetValue("")
-						return m, func() tea.Msg {
-							return RouteMsg{Mention: mention, Prompt: prompt}
-						}
-					}
 
-					m.AddMessage(fmt.Sprintf("You: %s", userInput))
-					m.textinput.SetValue("")
-					cmds = append(cmds, m.sendMessage(userInput))
+						// Add message before clearing input
+						m.AddMessage("You: " + userInput)
+						m.textinput.SetValue("")
+
+						// Only route if we have both mention and prompt
+						if len(parts) > 1 && prompt != "" {
+							return m, func() tea.Msg {
+								return RouteMsg{Mention: mention, Prompt: prompt}
+							}
+						}
+						// If no prompt, just show the message locally (no-op)
+					} else {
+						m.AddMessage(fmt.Sprintf("You: %s", userInput))
+						m.textinput.SetValue("")
+						cmds = append(cmds, m.sendMessage(userInput))
+					}
 				}
 			}
 			m.textinput, cmd = m.textinput.Update(msg)

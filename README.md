@@ -21,7 +21,7 @@
 ### Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-repo/charmingman.git
+   git clone git@github.com:OWNER/REPO.git
    cd charmingman
    ```
 2. Install dependencies:
@@ -63,7 +63,7 @@ CharmingMan is built with a layered architecture:
 - [x] Phase 1: AI Gateway & TUI Architecture
 - [x] Phase 2: Persistence & Local SQLite
 - [x] Phase 3: Intelligence & Knowledge (RAG)
-- [ ] Phase 4: Multi-Agent Swarms & Tools
+- [x] Phase 4: Multi-Agent Swarms & Tools
 - [ ] Phase 5: Voice & Multimedia (Whisper/TTS)
 
 ---

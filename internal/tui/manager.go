@@ -29,9 +29,11 @@ func NewManager() *Manager {
 }
 
 // AddWindow adds a new window to the manager.
-func (m *Manager) AddWindow(w *Window) {
+func (m *Manager) AddWindow(w *Window, focus bool) {
 	m.Windows = append(m.Windows, w)
-	m.FocusWindow(w.ID)
+	if focus {
+		m.FocusWindow(w.ID)
+	}
 }
 
 // Update handles messages for all windows.
@@ -59,25 +61,36 @@ func (m *Manager) Update(msg tea.Msg) tea.Cmd {
 
 	// Handle global panning/zooming keys
 	if msg, ok := msg.(tea.KeyPressMsg); ok {
+		handled := false
 		switch msg.String() {
 		case "up":
 			m.OffsetY -= 1
+			handled = true
 		case "down":
 			m.OffsetY += 1
+			handled = true
 		case "left":
 			m.OffsetX -= 2
+			handled = true
 		case "right":
 			m.OffsetX += 2
+			handled = true
 		case "+":
 			m.Zoom += 0.1
+			handled = true
 		case "-":
 			if m.Zoom > 0.2 {
 				m.Zoom -= 0.1
 			}
+			handled = true
 		case "0":
 			m.Zoom = 1.0
 			m.OffsetX = 0
 			m.OffsetY = 0
+			handled = true
+		}
+		if handled {
+			return nil
 		}
 	}
 
@@ -102,8 +115,12 @@ func (m *Manager) View() tea.View {
 		screenX := int(float64(w.X-m.OffsetX) * m.Zoom)
 		screenY := int(float64(w.Y-m.OffsetY) * m.Zoom)
 
-		// Basic culling
-		if screenX+w.Width < 0 || screenX > m.Width || screenY+w.Height < 0 || screenY > m.Height {
+		// Calculate scaled dimensions for consistent coordinate system
+		scaledWidth := int(float64(w.Width) * m.Zoom)
+		scaledHeight := int(float64(w.Height) * m.Zoom)
+
+		// Basic culling using scaled dimensions
+		if screenX+scaledWidth < 0 || screenX > m.Width || screenY+scaledHeight < 0 || screenY > m.Height {
 			continue
 		}
 
@@ -111,7 +128,7 @@ func (m *Manager) View() tea.View {
 			ID(w.ID).
 			X(screenX).
 			Y(screenY).
-			Z(i) 
+			Z(i)
 		comp.AddLayers(layer)
 	}
 
@@ -132,7 +149,7 @@ func (m *Manager) HandleMouse(msg tea.MouseMsg) tea.Cmd {
 			// Check for clicks in reverse Z-order
 			for i := len(m.Windows) - 1; i >= 0; i-- {
 				w := m.Windows[i]
-				
+
 				worldX := int(float64(mouse.X)/m.Zoom) + m.OffsetX
 				worldY := int(float64(mouse.Y)/m.Zoom) + m.OffsetY
 

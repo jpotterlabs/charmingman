@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -42,5 +43,44 @@ func LoadLayout(path string) (*Layout, error) {
 		return nil, err
 	}
 
+	if err := layout.Validate(); err != nil {
+		return nil, err
+	}
+
 	return &layout, nil
+}
+
+// Validate checks the layout for common configuration errors.
+func (l *Layout) Validate() error {
+	// Check for empty layout
+	if len(l.Windows) == 0 {
+		return fmt.Errorf("layout validation failed: no windows defined")
+	}
+
+	// Check for duplicate window IDs
+	idMap := make(map[string]bool)
+	for i, w := range l.Windows {
+		if w.ID == "" {
+			return fmt.Errorf("layout validation failed: window at index %d has empty ID", i)
+		}
+		if idMap[w.ID] {
+			return fmt.Errorf("layout validation failed: duplicate window ID %q", w.ID)
+		}
+		idMap[w.ID] = true
+
+		// Check for missing or empty Type field
+		if w.Type == "" {
+			return fmt.Errorf("layout validation failed: window %q has empty Type field", w.ID)
+		}
+
+		// Check for invalid dimensions
+		if w.Width <= 0 {
+			return fmt.Errorf("layout validation failed: window %q has invalid width %d (must be > 0)", w.ID, w.Width)
+		}
+		if w.Height <= 0 {
+			return fmt.Errorf("layout validation failed: window %q has invalid height %d (must be > 0)", w.ID, w.Height)
+		}
+	}
+
+	return nil
 }
