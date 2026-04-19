@@ -30,9 +30,11 @@ type Source struct {
 }
 
 // RouteMsg is a message to be routed to a specific agent by name/mention.
+// It is broadcast to all windows; handlers should ignore messages from themselves.
 type RouteMsg struct {
-	Mention string
-	Prompt  string
+	SenderID string
+	Mention  string
+	Prompt   string
 }
 
 type ChatModel struct {
@@ -60,6 +62,7 @@ func NewChatModel(id string) *ChatModel {
 
 	return &ChatModel{
 		ID:        id,
+		AgentID:   id, // Initialize AgentID to match window ID by default
 		history:   make([]string, 0),
 		textinput: ti,
 	}
@@ -97,7 +100,7 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.Focused {
 			switch msg.String() {
 			case "enter":
-				userInput := m.textinput.Value()
+				userInput := strings.TrimSpace(m.textinput.Value())
 				if userInput != "" {
 					// Check for @mention
 					if strings.HasPrefix(userInput, "@") {
@@ -105,25 +108,29 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						mention := strings.TrimPrefix(parts[0], "@")
 						prompt := ""
 						if len(parts) > 1 {
-							prompt = parts[1]
+							prompt = strings.TrimSpace(parts[1])
+						}
+						
+						// Guard against routing empty prompts
+						if prompt == "" {
+							m.AddMessage("System: Please provide a prompt after the mention.")
+							m.textinput.SetValue("")
+							return m, nil
 						}
 
-						// Add message before clearing input
-						m.AddMessage("You: " + userInput)
+						// Echo to local chat
+						m.AddMessage(fmt.Sprintf("You (to @%s): %s", mention, prompt))
 						m.textinput.SetValue("")
 
-						// Only route if we have both mention and prompt
-						if len(parts) > 1 && prompt != "" {
-							return m, func() tea.Msg {
-								return RouteMsg{Mention: mention, Prompt: prompt}
-							}
+						// Broadcast RouteMsg
+						return m, func() tea.Msg {
+							return RouteMsg{SenderID: m.ID, Mention: mention, Prompt: prompt}
 						}
-						// If no prompt, just show the message locally (no-op)
-					} else {
-						m.AddMessage(fmt.Sprintf("You: %s", userInput))
-						m.textinput.SetValue("")
-						cmds = append(cmds, m.sendMessage(userInput))
 					}
+
+					m.AddMessage(fmt.Sprintf("You: %s", userInput))
+					m.textinput.SetValue("")
+					cmds = append(cmds, m.sendMessage(userInput))
 				}
 			}
 			m.textinput, cmd = m.textinput.Update(msg)
@@ -137,6 +144,7 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.AddMessage(fmt.Sprintf("AI: %s", msg.Response))
 			if len(msg.Sources) > 0 {
 				m.AddMessage("Sources:")
+				// Show top 3 sources
 				limit := len(msg.Sources)
 				if limit > 3 {
 					limit = 3
@@ -144,6 +152,8 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				for i := 0; i < limit; i++ {
 					s := msg.Sources[i]
 					m.AddMessage(fmt.Sprintf("  [%d] Doc: %s (Score: %.2f)", i+1, s.DocumentID, s.Score))
+					
+					// Rune-aware truncation for snippet
 					runes := []rune(s.Content)
 					snippet := string(runes)
 					if len(runes) > 100 {
@@ -155,9 +165,9 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	
 	case RouteMsg:
-		// If we are the target of the mention, process the prompt
-		if strings.EqualFold(m.ID, msg.Mention) {
-			m.AddMessage(fmt.Sprintf("Mentioned with: %s", msg.Prompt))
+		// Ignore self-mentions and only respond if we are the target
+		if msg.SenderID != m.ID && strings.EqualFold(m.ID, msg.Mention) {
+			m.AddMessage(fmt.Sprintf("Mentioned by %s: %s", msg.SenderID, msg.Prompt))
 			cmds = append(cmds, m.sendMessage(msg.Prompt))
 		}
 	}
@@ -240,6 +250,7 @@ func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 		if err != nil {
 			return chatResponseMsg{Error: err}
 		}
+
 		req.Header.Set("Content-Type", "application/json")
 		
 		apiKey := os.Getenv("GATEWAY_API_KEY")
@@ -248,7 +259,7 @@ func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 		}
 		req.Header.Set("X-Charming-Key", apiKey)
 
-		client := &http.Client{Timeout: 35 * time.Second}
+		client := &http.Client{Timeout: 35 * time.Second} // Slightly longer than gateway timeout
 		resp, err := client.Do(req)
 		if err != nil {
 			return chatResponseMsg{Error: err}

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 
 	"charmingman/backend/internal/db"
@@ -54,20 +55,18 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 	prompt := req.Prompt
 	var sources []document.SearchResult
 
-	// 1. Fetch History if RoomID provided
+	// 1. Fetch History if RoomID provided (Bounded to last 10 messages)
 	var history []fantasy.Message
 	if req.RoomID != "" && h.queries != nil {
 		dbMsgs, err := h.queries.ListMessagesByRoom(c.Request.Context(), req.RoomID)
 		if err == nil {
-			// Cap history to last 20 messages to prevent huge model payloads
-			const maxHistoryMessages = 20
+			// Implementation of fixed cap (last 10 messages)
 			startIdx := 0
-			if len(dbMsgs) > maxHistoryMessages {
-				startIdx = len(dbMsgs) - maxHistoryMessages
+			if len(dbMsgs) > 10 {
+				startIdx = len(dbMsgs) - 10
 			}
-			dbMsgs = dbMsgs[startIdx:]
-
-			for _, m := range dbMsgs {
+			for i := startIdx; i < len(dbMsgs); i++ {
+				m := dbMsgs[i]
 				role := fantasy.MessageRole(m.Role)
 				history = append(history, fantasy.Message{
 					Role:    role,
@@ -81,11 +80,8 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 	if req.UseRAG && h.documentService != nil {
 		results, err := h.documentService.Search(c.Request.Context(), req.Prompt, 3)
 		if err != nil {
-			safePrompt := req.Prompt
-			if len(safePrompt) > 20 {
-				safePrompt = safePrompt[:20] + "..."
-			}
-			log.Printf("Error during RAG search for prompt %q (len: %d): %v", safePrompt, len(req.Prompt), err)
+			// Redact prompt in logs completely, only log metadata
+			log.Printf("Error during RAG search for prompt of len %d: %v", len(req.Prompt), err)
 		} else if len(results) > 0 {
 			sources = results
 			var contextBuilder strings.Builder
@@ -101,7 +97,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		}
 	}
 
-	// 3. Persist User Message
+	// 3. Persist User Message (Respect Request Context)
 	if req.RoomID != "" && h.queries != nil {
 		_, _ = h.queries.CreateMessage(c.Request.Context(), db.CreateMessageParams{
 			ID:      uuid.New().String(),
@@ -111,14 +107,14 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		})
 	}
 
-	// 3.5. Append current prompt to history before calling provider
-	history = append(history, fantasy.Message{
+	// 4. Augment history with current prompt before calling model
+	augmentedHistory := append(slices.Clone(history), fantasy.Message{
 		Role:    fantasy.MessageRoleUser,
 		Content: []fantasy.MessagePart{fantasy.TextPart{Text: prompt}},
 	})
 
-	// 4. Call Model
-	res, err := h.providerService.Chat(c.Request.Context(), req.Provider, req.Model, prompt, history)
+	// 5. Call Model
+	res, err := h.providerService.Chat(c.Request.Context(), req.Provider, req.Model, prompt, augmentedHistory)
 	if err != nil {
 		if strings.Contains(err.Error(), "not registered") {
 			c.JSON(http.StatusBadRequest, ChatResponse{Error: err.Error()})
@@ -128,7 +124,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		return
 	}
 
-	// 5. Persist Assistant Message
+	// 6. Persist Assistant Message (Respect Request Context)
 	if req.RoomID != "" && h.queries != nil {
 		agentID := sql.NullString{String: req.AgentID, Valid: req.AgentID != ""}
 		_, _ = h.queries.CreateMessage(c.Request.Context(), db.CreateMessageParams{

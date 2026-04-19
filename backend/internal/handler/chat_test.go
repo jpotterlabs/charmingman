@@ -115,7 +115,7 @@ func TestHandleChat_RAGContextInjection(t *testing.T) {
 	// 1. Setup Provider using RegisterLocal
 	ps := provider.NewProviderService(nil)
 	err := ps.RegisterLocal("mock", mockServer.URL)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// 2. Setup Document Service with LocalStore
 	store := vector.NewLocalStore()
