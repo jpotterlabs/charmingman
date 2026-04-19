@@ -53,7 +53,7 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 const listMessagesByRoom = `-- name: ListMessagesByRoom :many
 SELECT id, room_id, agent_id, role, content, tokens_used, created_at FROM messages
 WHERE room_id = ?
-ORDER BY created_at ASC
+ORDER BY created_at ASC, id ASC
 `
 
 func (q *Queries) ListMessagesByRoom(ctx context.Context, roomID string) ([]Message, error) {

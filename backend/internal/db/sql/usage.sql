@@ -8,8 +8,8 @@ RETURNING *;
 
 -- name: GetTotalUsage :one
 SELECT
-    COALESCE(SUM(total_tokens), 0) as total_tokens,
-    COALESCE(SUM(cost), 0.0) as total_cost,
+    CAST(COALESCE(SUM(total_tokens), 0) AS INTEGER) as total_tokens,
+    CAST(COALESCE(SUM(cost), 0.0) AS REAL) as total_cost,
     COUNT(*) as total_requests
 FROM usage_log;
 

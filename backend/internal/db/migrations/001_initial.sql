@@ -7,6 +7,7 @@ CREATE TABLE agents (
     provider TEXT NOT NULL,
     persona TEXT,
     api_key_ref TEXT, -- Reference to secret manager or encrypted store
+    use_rag BOOLEAN NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -50,7 +51,29 @@ CREATE TABLE usage_log (
 );
 CREATE INDEX idx_usage_log_timestamp ON usage_log(timestamp);
 
+-- Documents table
+CREATE TABLE documents (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Document Chunks table
+CREATE TABLE document_chunks (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+);
+CREATE INDEX idx_document_chunks_document_id ON document_chunks(document_id);
+
 -- +goose Down
+DROP TABLE document_chunks;
+DROP TABLE documents;
 DROP TABLE usage_log;
 DROP TABLE messages;
 DROP TABLE rooms;

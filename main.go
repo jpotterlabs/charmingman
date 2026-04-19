@@ -54,6 +54,8 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		if m.state == stateDashboard {
 			m.manager.SetSize(msg.Width, msg.Height)
+			// Re-initialize dashboard geometry on resize to keep windows in view
+			return m, m.resizeDashboard()
 		}
 	}
 
@@ -173,12 +175,13 @@ func (m rootModel) saveAgent() tea.Cmd {
 			provider = "ollama"
 		}
 
-		payload := map[string]string{
+		payload := map[string]interface{}{
 			"name":     m.wizard.Results.Name,
 			"model":    model,
 			"provider": provider,
 			"persona":  m.wizard.Results.Persona,
 			"api_key":  m.wizard.Results.APIKey,
+			"use_rag":  m.wizard.Results.UseRAG,
 		}
 
 		jsonData, err := json.Marshal(payload)
@@ -217,10 +220,49 @@ func (m rootModel) saveAgent() tea.Cmd {
 	}
 }
 
+func (m *rootModel) calculateGeometry() (chatX, chatY, chatW, chatH, docX, docY, docW, docH int) {
+	// Simple tiling/stacking logic
+	if m.width >= 150 {
+		// Side-by-side
+		chatW = 60
+		chatH = m.height - 4
+		chatX = 2
+		chatY = 1
+
+		docW = m.width - chatW - 6
+		docH = m.height - 4
+		docX = chatW + 4
+		docY = 1
+	} else {
+		// Stacked vertically or overlapping
+		chatW = m.width - 4
+		chatH = (m.height / 2) - 2
+		chatX = 2
+		chatY = 1
+
+		docW = m.width - 4
+		docH = (m.height / 2) - 2
+		docX = 2
+		docY = chatH + 2
+	}
+
+	// Clamp minimum sizes
+	if chatW < 20 { chatW = 20 }
+	if chatH < 10 { chatH = 10 }
+	if docW < 20 { docW = 20 }
+	if docH < 10 { docH = 10 }
+	
+	return
+}
+
 func (m rootModel) initDashboard() tea.Cmd {
+	chatX, chatY, chatW, chatH, docX, docY, docW, docH := m.calculateGeometry()
+
+	// 1. Chat Window
 	chat := tui.NewChatModel()
 	chat.Model = m.wizard.Results.Model
 	chat.APIKey = m.wizard.Results.APIKey
+	chat.UseRAG = m.wizard.Results.UseRAG
 	
 	switch {
 	case strings.Contains(strings.ToLower(chat.Model), "gpt"):
@@ -235,18 +277,54 @@ func (m rootModel) initDashboard() tea.Cmd {
 
 	chat.AddMessage(fmt.Sprintf("Agent %s initialized and saved!", m.wizard.Results.Name))
 	
-	win := tui.NewWindow(m.wizard.Results.Name, m.wizard.Results.Name, chat)
-	win.Width = 60
-	win.Height = 20
-	win.X = 10
-	win.Y = 5
+	chatWin := tui.NewWindow(m.wizard.Results.Name, m.wizard.Results.Name, chat)
+	chatWin.X = chatX
+	chatWin.Y = chatY
+	chatWin.Width = chatW
+	chatWin.Height = chatH
 	
-	m.manager.AddWindow(win)
+	m.manager.AddWindow(chatWin)
+
+	// 2. Document Preview Window (The Stage)
+	doc := tui.NewDocumentModel("# Knowledge Base\n\nWelcome to your agent's knowledge base. You can upload documents here to ground your assistant in specific context.")
+	docWin := tui.NewWindow("stage", "The Stage", doc)
+	docWin.X = docX
+	docWin.Y = docY
+	docWin.Width = docW
+	docWin.Height = docH
 	
-	// Pass the actual current root dimensions to the initial resize
-	return func() tea.Msg {
-		return tea.WindowSizeMsg{Width: m.width, Height: m.height}
+	m.manager.AddWindow(docWin)
+	
+	return m.resizeDashboard()
+}
+
+func (m rootModel) resizeDashboard() tea.Cmd {
+	chatX, chatY, chatW, chatH, docX, docY, docW, docH := m.calculateGeometry()
+	
+	var cmds []tea.Cmd
+	for _, w := range m.manager.Windows {
+		if w.ID == "stage" {
+			w.X = docX
+			w.Y = docY
+			w.Width = docW
+			w.Height = docH
+			cmds = append(cmds, func() tea.Msg {
+				return tui.WindowMsg{ID: "stage", Msg: tea.WindowSizeMsg{Width: docW - 2, Height: docH - 2}}
+			})
+		} else {
+			// Assume it's the chat window
+			w.X = chatX
+			w.Y = chatY
+			w.Width = chatW
+			w.Height = chatH
+			cmds = append(cmds, func(id string, width, height int) func() tea.Msg {
+				return func() tea.Msg {
+					return tui.WindowMsg{ID: id, Msg: tea.WindowSizeMsg{Width: width - 2, Height: height - 2}}
+				}
+			}(w.ID, chatW, chatH))
+		}
 	}
+	return tea.Batch(cmds...)
 }
 
 func main() {

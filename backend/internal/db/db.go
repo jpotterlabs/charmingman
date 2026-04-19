@@ -27,6 +27,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.createAgentStmt, err = db.PrepareContext(ctx, createAgent); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateAgent: %w", err)
 	}
+	if q.createDocumentStmt, err = db.PrepareContext(ctx, createDocument); err != nil {
+		return nil, fmt.Errorf("error preparing query CreateDocument: %w", err)
+	}
+	if q.createDocumentChunkStmt, err = db.PrepareContext(ctx, createDocumentChunk); err != nil {
+		return nil, fmt.Errorf("error preparing query CreateDocumentChunk: %w", err)
+	}
 	if q.createMessageStmt, err = db.PrepareContext(ctx, createMessage); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateMessage: %w", err)
 	}
@@ -35,6 +41,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.deleteAgentStmt, err = db.PrepareContext(ctx, deleteAgent); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteAgent: %w", err)
+	}
+	if q.deleteDocumentStmt, err = db.PrepareContext(ctx, deleteDocument); err != nil {
+		return nil, fmt.Errorf("error preparing query DeleteDocument: %w", err)
 	}
 	if q.deleteRoomStmt, err = db.PrepareContext(ctx, deleteRoom); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteRoom: %w", err)
@@ -45,6 +54,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getAgentSecretStmt, err = db.PrepareContext(ctx, getAgentSecret); err != nil {
 		return nil, fmt.Errorf("error preparing query GetAgentSecret: %w", err)
 	}
+	if q.getChunkStmt, err = db.PrepareContext(ctx, getChunk); err != nil {
+		return nil, fmt.Errorf("error preparing query GetChunk: %w", err)
+	}
+	if q.getDocumentStmt, err = db.PrepareContext(ctx, getDocument); err != nil {
+		return nil, fmt.Errorf("error preparing query GetDocument: %w", err)
+	}
 	if q.getRoomStmt, err = db.PrepareContext(ctx, getRoom); err != nil {
 		return nil, fmt.Errorf("error preparing query GetRoom: %w", err)
 	}
@@ -53,6 +68,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.listAgentsStmt, err = db.PrepareContext(ctx, listAgents); err != nil {
 		return nil, fmt.Errorf("error preparing query ListAgents: %w", err)
+	}
+	if q.listChunksByDocumentStmt, err = db.PrepareContext(ctx, listChunksByDocument); err != nil {
+		return nil, fmt.Errorf("error preparing query ListChunksByDocument: %w", err)
+	}
+	if q.listDocumentsStmt, err = db.PrepareContext(ctx, listDocuments); err != nil {
+		return nil, fmt.Errorf("error preparing query ListDocuments: %w", err)
 	}
 	if q.listMessagesByRoomStmt, err = db.PrepareContext(ctx, listMessagesByRoom); err != nil {
 		return nil, fmt.Errorf("error preparing query ListMessagesByRoom: %w", err)
@@ -79,6 +100,16 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing createAgentStmt: %w", cerr)
 		}
 	}
+	if q.createDocumentStmt != nil {
+		if cerr := q.createDocumentStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createDocumentStmt: %w", cerr)
+		}
+	}
+	if q.createDocumentChunkStmt != nil {
+		if cerr := q.createDocumentChunkStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createDocumentChunkStmt: %w", cerr)
+		}
+	}
 	if q.createMessageStmt != nil {
 		if cerr := q.createMessageStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing createMessageStmt: %w", cerr)
@@ -92,6 +123,11 @@ func (q *Queries) Close() error {
 	if q.deleteAgentStmt != nil {
 		if cerr := q.deleteAgentStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing deleteAgentStmt: %w", cerr)
+		}
+	}
+	if q.deleteDocumentStmt != nil {
+		if cerr := q.deleteDocumentStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing deleteDocumentStmt: %w", cerr)
 		}
 	}
 	if q.deleteRoomStmt != nil {
@@ -109,6 +145,16 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getAgentSecretStmt: %w", cerr)
 		}
 	}
+	if q.getChunkStmt != nil {
+		if cerr := q.getChunkStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getChunkStmt: %w", cerr)
+		}
+	}
+	if q.getDocumentStmt != nil {
+		if cerr := q.getDocumentStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getDocumentStmt: %w", cerr)
+		}
+	}
 	if q.getRoomStmt != nil {
 		if cerr := q.getRoomStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getRoomStmt: %w", cerr)
@@ -122,6 +168,16 @@ func (q *Queries) Close() error {
 	if q.listAgentsStmt != nil {
 		if cerr := q.listAgentsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listAgentsStmt: %w", cerr)
+		}
+	}
+	if q.listChunksByDocumentStmt != nil {
+		if cerr := q.listChunksByDocumentStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listChunksByDocumentStmt: %w", cerr)
+		}
+	}
+	if q.listDocumentsStmt != nil {
+		if cerr := q.listDocumentsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listDocumentsStmt: %w", cerr)
 		}
 	}
 	if q.listMessagesByRoomStmt != nil {
@@ -186,43 +242,57 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 }
 
 type Queries struct {
-	db                     DBTX
-	tx                     *sql.Tx
-	createAgentStmt        *sql.Stmt
-	createMessageStmt      *sql.Stmt
-	createRoomStmt         *sql.Stmt
-	deleteAgentStmt        *sql.Stmt
-	deleteRoomStmt         *sql.Stmt
-	getAgentStmt           *sql.Stmt
-	getAgentSecretStmt     *sql.Stmt
-	getRoomStmt            *sql.Stmt
-	getTotalUsageStmt      *sql.Stmt
-	listAgentsStmt         *sql.Stmt
-	listMessagesByRoomStmt *sql.Stmt
-	listRoomsStmt          *sql.Stmt
-	listUsageLogsStmt      *sql.Stmt
-	logUsageStmt           *sql.Stmt
-	updateAgentStmt        *sql.Stmt
+	db                       DBTX
+	tx                       *sql.Tx
+	createAgentStmt          *sql.Stmt
+	createDocumentStmt       *sql.Stmt
+	createDocumentChunkStmt  *sql.Stmt
+	createMessageStmt        *sql.Stmt
+	createRoomStmt           *sql.Stmt
+	deleteAgentStmt          *sql.Stmt
+	deleteDocumentStmt       *sql.Stmt
+	deleteRoomStmt           *sql.Stmt
+	getAgentStmt             *sql.Stmt
+	getAgentSecretStmt       *sql.Stmt
+	getChunkStmt             *sql.Stmt
+	getDocumentStmt          *sql.Stmt
+	getRoomStmt              *sql.Stmt
+	getTotalUsageStmt        *sql.Stmt
+	listAgentsStmt           *sql.Stmt
+	listChunksByDocumentStmt *sql.Stmt
+	listDocumentsStmt        *sql.Stmt
+	listMessagesByRoomStmt   *sql.Stmt
+	listRoomsStmt            *sql.Stmt
+	listUsageLogsStmt        *sql.Stmt
+	logUsageStmt             *sql.Stmt
+	updateAgentStmt          *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
-		db:                     tx,
-		tx:                     tx,
-		createAgentStmt:        q.createAgentStmt,
-		createMessageStmt:      q.createMessageStmt,
-		createRoomStmt:         q.createRoomStmt,
-		deleteAgentStmt:        q.deleteAgentStmt,
-		deleteRoomStmt:         q.deleteRoomStmt,
-		getAgentStmt:           q.getAgentStmt,
-		getAgentSecretStmt:     q.getAgentSecretStmt,
-		getRoomStmt:            q.getRoomStmt,
-		getTotalUsageStmt:      q.getTotalUsageStmt,
-		listAgentsStmt:         q.listAgentsStmt,
-		listMessagesByRoomStmt: q.listMessagesByRoomStmt,
-		listRoomsStmt:          q.listRoomsStmt,
-		listUsageLogsStmt:      q.listUsageLogsStmt,
-		logUsageStmt:           q.logUsageStmt,
-		updateAgentStmt:        q.updateAgentStmt,
+		db:                       tx,
+		tx:                       tx,
+		createAgentStmt:          q.createAgentStmt,
+		createDocumentStmt:       q.createDocumentStmt,
+		createDocumentChunkStmt:  q.createDocumentChunkStmt,
+		createMessageStmt:        q.createMessageStmt,
+		createRoomStmt:           q.createRoomStmt,
+		deleteAgentStmt:          q.deleteAgentStmt,
+		deleteDocumentStmt:       q.deleteDocumentStmt,
+		deleteRoomStmt:           q.deleteRoomStmt,
+		getAgentStmt:             q.getAgentStmt,
+		getAgentSecretStmt:       q.getAgentSecretStmt,
+		getChunkStmt:             q.getChunkStmt,
+		getDocumentStmt:          q.getDocumentStmt,
+		getRoomStmt:              q.getRoomStmt,
+		getTotalUsageStmt:        q.getTotalUsageStmt,
+		listAgentsStmt:           q.listAgentsStmt,
+		listChunksByDocumentStmt: q.listChunksByDocumentStmt,
+		listDocumentsStmt:        q.listDocumentsStmt,
+		listMessagesByRoomStmt:   q.listMessagesByRoomStmt,
+		listRoomsStmt:            q.listRoomsStmt,
+		listUsageLogsStmt:        q.listUsageLogsStmt,
+		logUsageStmt:             q.logUsageStmt,
+		updateAgentStmt:          q.updateAgentStmt,
 	}
 }

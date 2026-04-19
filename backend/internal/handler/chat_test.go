@@ -15,7 +15,7 @@ import (
 func TestHandleChat_BadRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ps := provider.NewProviderService(nil)
-	h := NewChatHandler(ps)
+	h := NewChatHandler(ps, nil)
 
 	r := gin.Default()
 	r.POST("/chat", h.HandleChat)
@@ -33,7 +33,7 @@ func TestHandleChat_BadRequest(t *testing.T) {
 func TestHandleChat_ProviderNotRegistered(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ps := provider.NewProviderService(nil)
-	h := NewChatHandler(ps)
+	h := NewChatHandler(ps, nil)
 
 	r := gin.Default()
 	r.POST("/chat", h.HandleChat)
