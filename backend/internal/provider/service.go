@@ -2,9 +2,12 @@ package provider
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"log"
 	"time"
 
+	"charmingman/backend/internal/db"
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/openai"
@@ -14,11 +17,13 @@ import (
 type ProviderService struct {
 	// Map of provider name to fantasy provider
 	providers map[string]fantasy.Provider
+	queries   *db.Queries
 }
 
-func NewProviderService() *ProviderService {
+func NewProviderService(queries *db.Queries) *ProviderService {
 	return &ProviderService{
 		providers: make(map[string]fantasy.Provider),
+		queries:   queries,
 	}
 }
 
@@ -63,6 +68,7 @@ func (s *ProviderService) Chat(ctx context.Context, providerName, modelName, pro
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	startTime := time.Now()
 	model, err := p.LanguageModel(ctx, modelName)
 	if err != nil {
 		return nil, err
@@ -72,6 +78,28 @@ func (s *ProviderService) Chat(ctx context.Context, providerName, modelName, pro
 	result, err := agent.Generate(ctx, fantasy.AgentCall{Prompt: prompt})
 	if err != nil {
 		return nil, err
+	}
+	latency := time.Since(startTime)
+
+	// Log usage asynchronously with a short timeout
+	if s.queries != nil {
+		go func() {
+			logCtx, logCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer logCancel()
+
+			_, err := s.queries.LogUsage(logCtx, db.LogUsageParams{
+				Provider:         providerName,
+				Model:            modelName,
+				PromptTokens:     int64(result.Response.Usage.InputTokens),
+				CompletionTokens: int64(result.Response.Usage.OutputTokens),
+				TotalTokens:      int64(result.Response.Usage.TotalTokens),
+				LatencyMs:        latency.Milliseconds(),
+				Cost:             sql.NullFloat64{Valid: false}, // Unknown cost for now
+			})
+			if err != nil {
+				log.Printf("Warning: failed to log usage: %v", err)
+			}
+		}()
 	}
 
 	return &result.Response, nil

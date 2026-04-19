@@ -1,22 +1,65 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 
+	"charmingman/backend/internal/db"
 	"charmingman/backend/internal/handler"
 	"charmingman/backend/internal/provider"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 )
+
+type AgentResponse struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Model     string    `json:"model"`
+	Provider  string    `json:"provider"`
+	Persona   string    `json:"persona"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func agentToResponse(a db.Agent) AgentResponse {
+	return AgentResponse{
+		ID:        a.ID,
+		Name:      a.Name,
+		Model:     a.Model,
+		Provider:  a.Provider,
+		Persona:   a.Persona.String,
+		CreatedAt: a.CreatedAt.Time,
+		UpdatedAt: a.UpdatedAt.Time,
+	}
+}
 
 func main() {
 	// Load .env file if it exists
 	_ = godotenv.Load()
 
+	ctx := context.Background()
+
+	// Initialize Database
+	dataDir := os.Getenv("DATA_DIR")
+	if dataDir == "" {
+		dataDir = "."
+	}
+	dbConn, err := db.Connect(ctx, dataDir)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer dbConn.Close()
+
+	queries := db.New(dbConn)
+
 	// Initialize Provider Service
-	ps := provider.NewProviderService()
+	ps := provider.NewProviderService(queries)
 
 	// Register providers from environment variables
 	openaiKey := os.Getenv("OPENAI_API_KEY")
@@ -82,11 +125,92 @@ func main() {
 	v1 := r.Group("/api/v1")
 	{
 		v1.POST("/chat", chatHandler.HandleChat)
+		
+		v1.GET("/usage", func(c *gin.Context) {
+			limit, err := strconv.ParseInt(c.DefaultQuery("limit", "100"), 10, 64)
+			if err != nil || limit <= 0 || limit > 1000 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid limit. Must be a positive integer <= 1000"})
+				return
+			}
+
+			offset, err := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+			if err != nil || offset < 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid offset. Must be a non-negative integer"})
+				return
+			}
+			
+			logs, err := queries.ListUsageLogs(c.Request.Context(), db.ListUsageLogsParams{
+				Limit:  limit,
+				Offset: offset,
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			
+			stats, err := queries.GetTotalUsage(c.Request.Context())
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			
+			c.JSON(http.StatusOK, gin.H{
+				"logs":  logs,
+				"stats": stats,
+			})
+		})
+
+		v1.GET("/agents", func(c *gin.Context) {
+			agents, err := queries.ListAgents(c.Request.Context())
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+
+			resp := make([]AgentResponse, len(agents))
+			for i, a := range agents {
+				resp[i] = agentToResponse(a)
+			}
+			c.JSON(http.StatusOK, resp)
+		})
+
+		v1.POST("/agents", func(c *gin.Context) {
+			var req struct {
+				ID       string `json:"id"`
+				Name     string `json:"name" binding:"required"`
+				Model    string `json:"model" binding:"required"`
+				Provider string `json:"provider" binding:"required"`
+				Persona  string `json:"persona"`
+				APIKey   string `json:"api_key"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			if req.ID == "" {
+				req.ID = uuid.New().String()
+			}
+
+			agent, err := queries.CreateAgent(c.Request.Context(), db.CreateAgentParams{
+				ID:       req.ID,
+				Name:     req.Name,
+				Model:    req.Model,
+				Provider: req.Provider,
+				Persona:  sql.NullString{String: req.Persona, Valid: req.Persona != ""},
+				ApiKey:   sql.NullString{String: req.APIKey, Valid: req.APIKey != ""},
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusCreated, agentToResponse(agent))
+		})
 	}
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = "8090"
 	}
 
 	log.Printf("AI Gateway starting on port %s", port)

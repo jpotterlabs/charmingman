@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -133,7 +134,10 @@ func (m *ChatModel) SetFocused(f bool) {
 
 func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 	return func() tea.Msg {
-		url := "http://localhost:8080/api/v1/chat"
+		url := os.Getenv("GATEWAY_URL")
+		if url == "" {
+			url = "http://localhost:8090/api/v1/chat"
+		}
 		
 		payload := map[string]string{
 			"provider": m.Provider,

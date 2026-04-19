@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"charmingman/internal/tui"
 	tea "charm.land/bubbletea/v2"
@@ -14,7 +18,13 @@ type state int
 const (
 	stateWizard state = iota
 	stateDashboard
+	stateSavingAgent
+	stateSaveFailed
 )
+
+type agentSavedMsg struct {
+	Error error
+}
 
 type rootModel struct {
 	state   state
@@ -22,6 +32,7 @@ type rootModel struct {
 	manager *tui.Manager
 	width   int
 	height  int
+	err     error
 }
 
 func initialModel() rootModel {
@@ -37,47 +48,50 @@ func (m rootModel) Init() tea.Cmd {
 }
 
 func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Capture window size updates regardless of state
+	if msg, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = msg.Width
+		m.height = msg.Height
+		if m.state == stateDashboard {
+			m.manager.SetSize(msg.Width, msg.Height)
+		}
+	}
+
 	switch m.state {
 	case stateWizard:
 		newWizard, cmd := m.wizard.Update(msg)
 		m.wizard = newWizard.(*tui.WizardModel)
 		if m.wizard.IsDone() {
-			m.state = stateDashboard
-			// Initialize dashboard with agent
-			chat := tui.NewChatModel()
-			
-			// Map model names to providers for the backend
-			chat.Model = m.wizard.Results.Model
-			chat.APIKey = m.wizard.Results.APIKey
-			
-			switch {
-			case strings.Contains(strings.ToLower(chat.Model), "gpt"):
-				chat.Provider = "openai"
-			case strings.Contains(strings.ToLower(chat.Model), "claude"):
-				chat.Provider = "anthropic"
-			case strings.Contains(strings.ToLower(chat.Model), "llama3"):
-				chat.Provider = "ollama" // Default local to ollama for now
-			default:
-				chat.Provider = "openai"
-			}
-
-			chat.AddMessage(fmt.Sprintf("Agent %s initialized with model %s on provider %s", m.wizard.Results.Name, chat.Model, chat.Provider))
-			
-			win := tui.NewWindow(m.wizard.Results.Name, m.wizard.Results.Name, chat)
-			win.Width = 60
-			win.Height = 20
-			win.X = 10
-			win.Y = 5
-			
-			m.manager.AddWindow(win)
-			m.manager.SetSize(m.width, m.height)
-			
-			// Manually send initial size to the new chat model
-			chat.Update(tea.WindowSizeMsg{Width: win.Width - 2, Height: win.Height - 2})
-			
-			return m, nil
+			m.state = stateSavingAgent
+			return m, m.saveAgent()
 		}
 		return m, cmd
+
+	case stateSavingAgent:
+		if msg, ok := msg.(agentSavedMsg); ok {
+			if msg.Error != nil {
+				m.err = msg.Error
+				m.state = stateSaveFailed
+				return m, nil
+			}
+			m.state = stateDashboard
+			m.manager.SetSize(m.width, m.height)
+			return m, m.initDashboard()
+		}
+		return m, nil
+
+	case stateSaveFailed:
+		if msg, ok := msg.(tea.KeyPressMsg); ok {
+			if msg.String() == "enter" {
+				m.state = stateSavingAgent
+				return m, m.saveAgent()
+			}
+			if msg.String() == "q" || msg.String() == "ctrl+c" {
+				return m, tea.Quit
+			}
+		}
+		return m, nil
+
 	case stateDashboard:
 		switch msg := msg.(type) {
 		case tea.KeyPressMsg:
@@ -103,10 +117,6 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if cmd != nil {
 				return m, cmd
 			}
-		case tea.WindowSizeMsg:
-			m.width = msg.Width
-			m.height = msg.Height
-			m.manager.SetSize(msg.Width, msg.Height)
 		}
 		cmd := m.manager.Update(msg)
 		return m, cmd
@@ -122,10 +132,121 @@ func (m rootModel) View() tea.View {
 	switch m.state {
 	case stateWizard:
 		v.SetContent(m.wizard.View().Content)
+	case stateSavingAgent:
+		v.SetContent("Saving agent to gateway...")
+	case stateSaveFailed:
+		v.SetContent(fmt.Sprintf("Error saving agent: %v\n\nPress Enter to retry, or q to quit.", m.err))
 	case stateDashboard:
 		v.SetContent(m.manager.View().Content)
 	}
 	return v
+}
+
+func (m rootModel) saveAgent() tea.Cmd {
+	return func() tea.Msg {
+		rawURL := os.Getenv("GATEWAY_URL")
+		if rawURL == "" {
+			rawURL = "http://localhost:8090"
+		}
+
+		// Normalize URL to /api/v1/agents
+		baseURL := strings.TrimRight(rawURL, "/")
+		baseURL = strings.TrimSuffix(baseURL, "/api/v1/chat")
+		baseURL = strings.TrimSuffix(baseURL, "/api/v1/agents")
+		baseURL = strings.TrimSuffix(baseURL, "/chat")
+		baseURL = strings.TrimSuffix(baseURL, "/agents")
+		
+		finalURL := baseURL + "/api/v1/agents"
+		if !strings.Contains(finalURL, "://") {
+			finalURL = "http://" + finalURL
+		}
+
+		// Map model names to providers for the backend
+		provider := "openai"
+		model := m.wizard.Results.Model
+		switch {
+		case strings.Contains(strings.ToLower(model), "gpt"):
+			provider = "openai"
+		case strings.Contains(strings.ToLower(model), "claude"):
+			provider = "anthropic"
+		case strings.Contains(strings.ToLower(model), "llama3"):
+			provider = "ollama"
+		}
+
+		payload := map[string]string{
+			"name":     m.wizard.Results.Name,
+			"model":    model,
+			"provider": provider,
+			"persona":  m.wizard.Results.Persona,
+			"api_key":  m.wizard.Results.APIKey,
+		}
+
+		jsonData, err := json.Marshal(payload)
+		if err != nil {
+			return agentSavedMsg{Error: err}
+		}
+
+		req, err := http.NewRequest("POST", finalURL, bytes.NewBuffer(jsonData))
+		if err != nil {
+			return agentSavedMsg{Error: err}
+		}
+		req.Header.Set("Content-Type", "application/json")
+		
+		apiKey := os.Getenv("GATEWAY_API_KEY")
+		if apiKey == "" {
+			return agentSavedMsg{Error: fmt.Errorf("GATEWAY_API_KEY environment variable is not set")}
+		}
+		req.Header.Set("X-Charming-Key", apiKey)
+
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return agentSavedMsg{Error: err}
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+			var errResp struct {
+				Error string `json:"error"`
+			}
+			json.NewDecoder(resp.Body).Decode(&errResp)
+			return agentSavedMsg{Error: fmt.Errorf("server error (%d): %s", resp.StatusCode, errResp.Error)}
+		}
+
+		return agentSavedMsg{}
+	}
+}
+
+func (m rootModel) initDashboard() tea.Cmd {
+	chat := tui.NewChatModel()
+	chat.Model = m.wizard.Results.Model
+	chat.APIKey = m.wizard.Results.APIKey
+	
+	switch {
+	case strings.Contains(strings.ToLower(chat.Model), "gpt"):
+		chat.Provider = "openai"
+	case strings.Contains(strings.ToLower(chat.Model), "claude"):
+		chat.Provider = "anthropic"
+	case strings.Contains(strings.ToLower(chat.Model), "llama3"):
+		chat.Provider = "ollama"
+	default:
+		chat.Provider = "openai"
+	}
+
+	chat.AddMessage(fmt.Sprintf("Agent %s initialized and saved!", m.wizard.Results.Name))
+	
+	win := tui.NewWindow(m.wizard.Results.Name, m.wizard.Results.Name, chat)
+	win.Width = 60
+	win.Height = 20
+	win.X = 10
+	win.Y = 5
+	
+	m.manager.AddWindow(win)
+	
+	// Pass the actual current root dimensions to the initial resize
+	return func() tea.Msg {
+		return tea.WindowSizeMsg{Width: m.width, Height: m.height}
+	}
 }
 
 func main() {
