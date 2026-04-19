@@ -149,6 +149,11 @@ func main() {
 
 	// Initialize Handlers
 	chatHandler := handler.NewChatHandler(ps, docService, queries)
+	
+	var transcribeHandler *handler.TranscribeHandler
+	if openaiKey != "" {
+		transcribeHandler = handler.NewTranscribeHandler(openaiKey, "")
+	}
 
 	// Setup Gin router
 	r := gin.Default()
@@ -260,8 +265,7 @@ func main() {
 
 		// Document Endpoints
 		v1.POST("/documents", func(c *gin.Context) {
-			// Add request body size limit
-			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1024*10) // 1KB limit for JSON metadata
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1024*10) 
 
 			var req struct {
 				Title string `json:"title" binding:"required"`
@@ -316,6 +320,11 @@ func main() {
 
 			c.JSON(http.StatusOK, results)
 		})
+
+		// Multimedia Endpoints
+		if transcribeHandler != nil {
+			v1.POST("/transcribe", transcribeHandler.HandleTranscribe)
+		}
 	}
 
 	port := os.Getenv("PORT")

@@ -1,14 +1,15 @@
 # CharmingMan 🕶️
 
-**CharmingMan** is a sophisticated, multi-agent ChatTUI built exclusively on the **Charm** ecosystem. It provides a high-performance terminal interface for interacting with various LLM providers (OpenAI, Anthropic, Ollama, llama.cpp) and features a powerful RAG (Retrieval-Augmented Generation) pipeline.
+**CharmingMan** is a sophisticated, multi-agent ChatTUI built exclusively on the **Charm** ecosystem. It provides a high-performance terminal interface for interacting with various LLM providers (OpenAI, Anthropic, Ollama, llama.cpp) and features a powerful RAG (Retrieval-Augmented Generation) pipeline and a revolutionary **Infinity Canvas**.
 
 ## ✨ Features
 
-- **🧠 Multi-Agent Orchestration**: Create and manage multiple AI agents with distinct personas and model configurations.
-- **📚 Knowledge & RAG**: Ground your agents in your own data. Upload and index PDFs, Markdown, and Text files.
+- **🧠 Multi-Agent Orchestration**: Create and manage multiple AI agents with distinct personas. Agents share a persistent **RoomID** context and can be routed using **@mentions**.
+- **🌌 Infinity Canvas**: A spatial workspace for your agents. Navigate a non-linear graph of thoughts with camera panning, zooming, and world-to-screen coordinate mapping.
+- **📚 Knowledge & RAG**: Ground your agents in your own data. Upload and index PDFs, Markdown, and Text files with automated context injection.
 - **🖼️ "The Stage"**: A dedicated document preview window for inspecting RAG sources and AI-generated artifacts using `Glow`.
-- **🪟 Advanced TUI Layout**: A multi-pane, draggable, and resizable windowing system built with `Bubble Tea` and `Lipgloss`.
-- **🔌 Unified AI Gateway**: A backend service that abstracts provider differences, offering a single API for all your models.
+- **🪟 YAML-Driven Layouts**: Define your workspace in `layout.yaml`. Features semantic validation, auto-rescaling for different terminal sizes, and draggable/resizable windows.
+- **🔌 Unified AI Gateway**: A backend service that abstracts provider differences, offering a single API with built-in security like prompt redaction and path-traversal protection.
 - **🛠️ Wizard-driven Setup**: Easily configure new agents and providers through an interactive `Huh?` wizard.
 
 ## 🚀 Quick Start
@@ -55,16 +56,16 @@ DOCUMENTS_ROOT=./documents
 ## 🛠️ Architecture
 
 CharmingMan is built with a layered architecture:
-- **Frontend**: `Bubble Tea`, `Lipgloss`, `Huh`, `Glow`.
-- **Middleware (AI Gateway)**: Go-based service using the `fantasy` library for provider abstraction.
-- **Backend (Intelligence Engine)**: SQLite for persistence, Pinecone/Local for vector storage, and a custom document processing pipeline.
+- **Frontend**: `Bubble Tea`, `Lipgloss`, `Huh`, `Glow`, and a custom **Spatial Canvas Engine**.
+- **Middleware (AI Gateway)**: Go-based service using the `fantasy` library for provider abstraction and multi-agent routing.
+- **Backend (Intelligence Engine)**: SQLite for persistence, Pinecone/Local for vector storage, and a custom RAG pipeline with deep-copy mutation safety.
 
 ## 🗺️ Roadmap
 - [x] Phase 1: AI Gateway & TUI Architecture
 - [x] Phase 2: Persistence & Local SQLite
 - [x] Phase 3: Intelligence & Knowledge (RAG)
-- [x] Phase 4: Multi-Agent Swarms & Tools
-- [ ] Phase 5: Voice & Multimedia (Whisper/TTS)
+- [x] Phase 4: Advanced TUI & Infinity Canvas (Swarms, @Mentions, Layouts)
+- [ ] Phase 5: Voice & Multimedia (Whisper/TTS/MCP)
 
 ---
 Built with ❤️ using [Charm](https://charm.sh/).
