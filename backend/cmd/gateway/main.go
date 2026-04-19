@@ -27,19 +27,7 @@ type AgentResponse struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func listRowToAgentResponse(a db.ListAgentsRow) AgentResponse {
-	return AgentResponse{
-		ID:        a.ID,
-		Name:      a.Name,
-		Model:     a.Model,
-		Provider:  a.Provider,
-		Persona:   a.Persona.String,
-		CreatedAt: a.CreatedAt.Time,
-		UpdatedAt: a.UpdatedAt.Time,
-	}
-}
-
-func createRowToAgentResponse(a db.CreateAgentRow) AgentResponse {
+func agentToResponse(a db.Agent) AgentResponse {
 	return AgentResponse{
 		ID:        a.ID,
 		Name:      a.Name,
@@ -178,10 +166,10 @@ func main() {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			
+
 			resp := make([]AgentResponse, len(agents))
 			for i, a := range agents {
-				resp[i] = listRowToAgentResponse(a)
+				resp[i] = agentToResponse(a)
 			}
 			c.JSON(http.StatusOK, resp)
 		})
@@ -210,13 +198,13 @@ func main() {
 				Model:    req.Model,
 				Provider: req.Provider,
 				Persona:  sql.NullString{String: req.Persona, Valid: req.Persona != ""},
-				ApiKeyRef: sql.NullString{String: req.APIKey, Valid: req.APIKey != ""},
+				ApiKey:   sql.NullString{String: req.APIKey, Valid: req.APIKey != ""},
 			})
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			c.JSON(http.StatusCreated, createRowToAgentResponse(agent))
+			c.JSON(http.StatusCreated, agentToResponse(agent))
 		})
 	}
 

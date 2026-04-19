@@ -245,7 +245,7 @@ func (m rootModel) initDashboard() tea.Cmd {
 	
 	// Pass the actual current root dimensions to the initial resize
 	return func() tea.Msg {
-		return tea.WindowSizeMsg{Width: win.Width - 2, Height: win.Height - 2}
+		return tea.WindowSizeMsg{Width: m.width, Height: m.height}
 	}
 }
 
