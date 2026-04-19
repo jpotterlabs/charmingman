@@ -16,6 +16,30 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// AgentResponse is the DTO returned by agent endpoints (excludes api_key)
+type AgentResponse struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Model     string         `json:"model"`
+	Provider  string         `json:"provider"`
+	Persona   sql.NullString `json:"persona"`
+	CreatedAt sql.NullTime   `json:"created_at"`
+	UpdatedAt sql.NullTime   `json:"updated_at"`
+}
+
+// toAgentResponse converts a db.Agent to AgentResponse (omitting api_key)
+func toAgentResponse(agent db.Agent) AgentResponse {
+	return AgentResponse{
+		ID:        agent.ID,
+		Name:      agent.Name,
+		Model:     agent.Model,
+		Provider:  agent.Provider,
+		Persona:   agent.Persona,
+		CreatedAt: agent.CreatedAt,
+		UpdatedAt: agent.UpdatedAt,
+	}
+}
+
 func main() {
 	// Load .env file if it exists
 	_ = godotenv.Load()
@@ -143,7 +167,12 @@ func main() {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			c.JSON(http.StatusOK, agents)
+			// Map to DTO to exclude api_key
+			response := make([]AgentResponse, len(agents))
+			for i, agent := range agents {
+				response[i] = toAgentResponse(agent)
+			}
+			c.JSON(http.StatusOK, response)
 		})
 
 		v1.POST("/agents", func(c *gin.Context) {
@@ -176,7 +205,8 @@ func main() {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			c.JSON(http.StatusCreated, agent)
+			// Return DTO to exclude api_key
+			c.JSON(http.StatusCreated, toAgentResponse(agent))
 		})
 	}
 

@@ -14,7 +14,7 @@ type Agent struct {
 	Model     string         `json:"model"`
 	Provider  string         `json:"provider"`
 	Persona   sql.NullString `json:"persona"`
-	ApiKey    sql.NullString `json:"api_key"`
+	ApiKeyRef sql.NullString `json:"api_key_ref"`
 	CreatedAt sql.NullTime   `json:"created_at"`
 	UpdatedAt sql.NullTime   `json:"updated_at"`
 }

@@ -39,10 +39,12 @@ func Connect(ctx context.Context, dataDir string) (*sql.DB, error) {
 	goose.SetBaseFS(FS)
 
 	if err := goose.SetDialect("sqlite3"); err != nil {
+		db.Close()
 		return nil, fmt.Errorf("failed to set dialect: %w", err)
 	}
 
 	if err := goose.Up(db, "migrations"); err != nil {
+		db.Close()
 		return nil, fmt.Errorf("failed to apply migrations: %w", err)
 	}
 

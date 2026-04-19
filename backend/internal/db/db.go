@@ -42,6 +42,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getAgentStmt, err = db.PrepareContext(ctx, getAgent); err != nil {
 		return nil, fmt.Errorf("error preparing query GetAgent: %w", err)
 	}
+	if q.getAgentSecretStmt, err = db.PrepareContext(ctx, getAgentSecret); err != nil {
+		return nil, fmt.Errorf("error preparing query GetAgentSecret: %w", err)
+	}
 	if q.getRoomStmt, err = db.PrepareContext(ctx, getRoom); err != nil {
 		return nil, fmt.Errorf("error preparing query GetRoom: %w", err)
 	}
@@ -99,6 +102,11 @@ func (q *Queries) Close() error {
 	if q.getAgentStmt != nil {
 		if cerr := q.getAgentStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getAgentStmt: %w", cerr)
+		}
+	}
+	if q.getAgentSecretStmt != nil {
+		if cerr := q.getAgentSecretStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getAgentSecretStmt: %w", cerr)
 		}
 	}
 	if q.getRoomStmt != nil {
@@ -186,6 +194,7 @@ type Queries struct {
 	deleteAgentStmt        *sql.Stmt
 	deleteRoomStmt         *sql.Stmt
 	getAgentStmt           *sql.Stmt
+	getAgentSecretStmt     *sql.Stmt
 	getRoomStmt            *sql.Stmt
 	getTotalUsageStmt      *sql.Stmt
 	listAgentsStmt         *sql.Stmt
@@ -206,6 +215,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		deleteAgentStmt:        q.deleteAgentStmt,
 		deleteRoomStmt:         q.deleteRoomStmt,
 		getAgentStmt:           q.getAgentStmt,
+		getAgentSecretStmt:     q.getAgentSecretStmt,
 		getRoomStmt:            q.getRoomStmt,
 		getTotalUsageStmt:      q.getTotalUsageStmt,
 		listAgentsStmt:         q.listAgentsStmt,

@@ -1,5 +1,5 @@
-an extensible multi‑agent assistant: a local‑first hybrid client that combines a fast Go TUI with optional cloud services for sync, managed embeddings, telephony, and premium LLMs. 
-Build a modular multi‑agent assistant that runs locally (single‑binary TUI) with cloud integrations fIt enables power users to do RAG, transcription, agent orchestration, TTS, STT, telephonyKey features should include agent creation, room creation, and multiple agent orchestration with human orchestration using @mentions. eg, different agents within the same room are aware and can see other agents responess, the human coordination will callo n which agent speaks next using @mentions
+an extensible multi‑agent assistant: a local‑first hybrid client that combines a fast Go TUI with optional cloud services for sync, managed embeddings, telephony, and premium LLMs.
+Build a modular multi‑agent assistant that runs locally (single‑binary TUI) with cloud integrations. It enables power users to do RAG, transcription, agent orchestration, TTS, STT, and telephony. Key features include agent creation, room creation, and multi-agent orchestration with human orchestration using @mentions. Different agents within the same room are aware and can see other agents' responses. The human coordinator will call on which agent speaks next using @mentions.
 
 Process  documents, run agentic workflows, and integrate external tools — have all core features powered by either local or remote openai compatible keys
 
@@ -14,7 +14,7 @@ Include Whisper transcription hybrid (like all other services)
 Terminal TUI (Go, Bubble Tea + Bubbles + Lipgloss) as primary UI with a small web admin/portal for account/sync settings.
 Local agent manager + in‑process agent orchestration;
 LLM providers: local- ollama, vllm, llama.cpp; remote- openrouter, openai, anthropic
-Embeddings & vector DB: .
+Embeddings & vector DB: OpenAI text-embedding-3-small for embeddings + LanceDB for storage and ANN search — configured with OPENAI_API_KEY and local LanceDB path for lightweight, embedded vector search.
 Document ingestion: PDF & text upload, PDF text extraction, chunking, embedding, index/persist.
 Whisper transcription: local transcription servers (privacy) with cloud TTS (ElevenLabs) and Twilio for telephony optional.
 Agent & state: state machine for chatrooms & agents, structured message envelopes (metadata, tool calls, vector refs).

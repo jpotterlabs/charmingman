@@ -84,14 +84,17 @@ func (s *ProviderService) Chat(ctx context.Context, providerName, modelName, pro
 	// Log usage asynchronously to avoid blocking the response
 	if s.queries != nil {
 		go func() {
-			_, err := s.queries.LogUsage(context.Background(), db.LogUsageParams{
+			logCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			_, err := s.queries.LogUsage(logCtx, db.LogUsageParams{
 				Provider:         providerName,
 				Model:            modelName,
 				PromptTokens:     int64(result.Response.Usage.InputTokens),
 				CompletionTokens: int64(result.Response.Usage.OutputTokens),
 				TotalTokens:      int64(result.Response.Usage.TotalTokens),
 				LatencyMs:        latency.Milliseconds(),
-				Cost:             sql.NullFloat64{Float64: 0.0, Valid: true},
+				Cost:             sql.NullFloat64{Valid: false},
 			})
 			if err != nil {
 				log.Printf("Warning: failed to log usage: %v", err)

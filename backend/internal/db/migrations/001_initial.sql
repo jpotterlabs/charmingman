@@ -1,3 +1,6 @@
+-- +goose Up
+-- Migration plan: api_key_ref stores a non-secret reference/identifier instead of plaintext API keys.
+-- Future: Create a separate secrets table or use OS keyring for actual secret storage.
 -- Agents table
 CREATE TABLE agents (
     id TEXT PRIMARY KEY,
@@ -5,7 +8,7 @@ CREATE TABLE agents (
     model TEXT NOT NULL,
     provider TEXT NOT NULL,
     persona TEXT,
-    api_key TEXT,
+    api_key_ref TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -44,3 +47,9 @@ CREATE TABLE usage_log (
     cost REAL DEFAULT 0.0,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- +goose Down
+DROP TABLE IF EXISTS usage_log;
+DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS rooms;
+DROP TABLE IF EXISTS agents;

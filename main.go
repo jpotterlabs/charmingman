@@ -59,10 +59,14 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stateSavingAgent:
 		if msg, ok := msg.(agentSavedMsg); ok {
 			if msg.Error != nil {
-				// For now, just log and continue to dashboard anyway
-				// In a real app, we might show an error screen
+				// On error, log and stay in error state or go back to wizard
 				fmt.Printf("Error saving agent: %v\n", msg.Error)
+				// Stay in saving state showing error (or transition to wizard)
+				// For now, return to wizard on error
+				m.state = stateWizard
+				return m, nil
 			}
+			// Only proceed to dashboard on success
 			m.state = stateDashboard
 			return m, m.initDashboard()
 		}
@@ -126,10 +130,13 @@ func (m rootModel) saveAgent() tea.Cmd {
 		if url == "" {
 			url = "http://localhost:8090/api/v1/agents"
 		} else {
-			// Ensure it points to the agents endpoint if it was just the base URL
-			if !strings.HasSuffix(url, "/agents") {
-				url = strings.TrimSuffix(url, "/chat") + "/agents"
-			}
+			// Normalize to /api/v1/agents endpoint
+			url = strings.TrimSuffix(url, "/")
+			url = strings.TrimSuffix(url, "/agents")
+			url = strings.TrimSuffix(url, "/chat")
+			url = strings.TrimSuffix(url, "/api/v1")
+			url = strings.TrimSuffix(url, "/api")
+			url = url + "/api/v1/agents"
 		}
 
 		// Map model names to providers for the backend
@@ -161,8 +168,14 @@ func (m rootModel) saveAgent() tea.Cmd {
 		if err != nil {
 			return agentSavedMsg{Error: err}
 		}
+
+		gatewayAPIKey := os.Getenv("GATEWAY_API_KEY")
+		if gatewayAPIKey == "" {
+			return agentSavedMsg{Error: fmt.Errorf("GATEWAY_API_KEY environment variable is not set")}
+		}
+
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-Charming-Key", "charming-secret-key")
+		req.Header.Set("X-Charming-Key", gatewayAPIKey)
 
 		client := &http.Client{Timeout: 5 * time.Second}
 		resp, err := client.Do(req)

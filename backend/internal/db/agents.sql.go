@@ -12,11 +12,11 @@ import (
 
 const createAgent = `-- name: CreateAgent :one
 INSERT INTO agents (
-    id, name, model, provider, persona, api_key
+    id, name, model, provider, persona, api_key_ref
 ) VALUES (
     ?, ?, ?, ?, ?, ?
 )
-RETURNING id, name, model, provider, persona, api_key, created_at, updated_at
+RETURNING id, name, model, provider, persona, NULL AS api_key_ref, created_at, updated_at
 `
 
 type CreateAgentParams struct {
@@ -44,7 +44,7 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 		&i.Model,
 		&i.Provider,
 		&i.Persona,
-		&i.ApiKey,
+		&i.ApiKeyRef,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -61,8 +61,21 @@ func (q *Queries) DeleteAgent(ctx context.Context, id string) error {
 	return err
 }
 
+const getAgentSecret = `-- name: GetAgentSecret :one
+-- Internal query for retrieving agent secrets
+SELECT api_key_ref FROM agents
+WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetAgentSecret(ctx context.Context, id string) (sql.NullString, error) {
+	row := q.queryRow(ctx, q.getAgentSecretStmt, getAgentSecret, id)
+	var api_key_ref sql.NullString
+	err := row.Scan(&api_key_ref)
+	return api_key_ref, err
+}
+
 const getAgent = `-- name: GetAgent :one
-SELECT id, name, model, provider, persona, api_key, created_at, updated_at FROM agents
+SELECT id, name, model, provider, persona, NULL AS api_key_ref, created_at, updated_at FROM agents
 WHERE id = ? LIMIT 1
 `
 
@@ -75,7 +88,7 @@ func (q *Queries) GetAgent(ctx context.Context, id string) (Agent, error) {
 		&i.Model,
 		&i.Provider,
 		&i.Persona,
-		&i.ApiKey,
+		&i.ApiKeyRef,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -83,7 +96,7 @@ func (q *Queries) GetAgent(ctx context.Context, id string) (Agent, error) {
 }
 
 const listAgents = `-- name: ListAgents :many
-SELECT id, name, model, provider, persona, api_key, created_at, updated_at FROM agents
+SELECT id, name, model, provider, persona, NULL AS api_key_ref, created_at, updated_at FROM agents
 ORDER BY name
 `
 
@@ -102,7 +115,7 @@ func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
 			&i.Model,
 			&i.Provider,
 			&i.Persona,
-			&i.ApiKey,
+			&i.ApiKeyRef,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -125,10 +138,10 @@ SET name = ?,
     model = ?,
     provider = ?,
     persona = ?,
-    api_key = ?,
+    api_key_ref = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, name, model, provider, persona, api_key, created_at, updated_at
+RETURNING id, name, model, provider, persona, NULL AS api_key_ref, created_at, updated_at
 `
 
 type UpdateAgentParams struct {
@@ -156,7 +169,7 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Agent
 		&i.Model,
 		&i.Provider,
 		&i.Persona,
-		&i.ApiKey,
+		&i.ApiKeyRef,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
