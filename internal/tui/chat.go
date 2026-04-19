@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,12 +32,14 @@ type Source struct {
 	Score      float32 `json:"score"`
 }
 
-// RouteMsg is a message to be routed to a specific agent by name/mention.
-// It is broadcast to all windows; handlers should ignore messages from themselves.
 type RouteMsg struct {
 	SenderID string
 	Mention  string
 	Prompt   string
+}
+
+type playbackFinishedMsg struct {
+	Error error
 }
 
 type ChatModel struct {
@@ -54,6 +59,8 @@ type ChatModel struct {
 	APIKey   string
 	UseRAG   bool
 	RoomID   string
+
+	speaking bool
 }
 
 func NewChatModel(id string) *ChatModel {
@@ -62,7 +69,7 @@ func NewChatModel(id string) *ChatModel {
 
 	return &ChatModel{
 		ID:        id,
-		AgentID:   id, // Initialize AgentID to match window ID by default
+		AgentID:   id,
 		history:   make([]string, 0),
 		textinput: ti,
 	}
@@ -82,7 +89,6 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		// Subtract space for text input
 		viewportHeight := m.height - 3
 		if viewportHeight < 0 {
 			viewportHeight = 0
@@ -102,7 +108,6 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				userInput := strings.TrimSpace(m.textinput.Value())
 				if userInput != "" {
-					// Check for @mention
 					if strings.HasPrefix(userInput, "@") {
 						parts := strings.SplitN(userInput, " ", 2)
 						mention := strings.TrimPrefix(parts[0], "@")
@@ -110,19 +115,13 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if len(parts) > 1 {
 							prompt = strings.TrimSpace(parts[1])
 						}
-						
-						// Guard against routing empty prompts
 						if prompt == "" {
 							m.AddMessage("System: Please provide a prompt after the mention.")
 							m.textinput.SetValue("")
 							return m, nil
 						}
-
-						// Echo to local chat
 						m.AddMessage(fmt.Sprintf("You (to @%s): %s", mention, prompt))
 						m.textinput.SetValue("")
-
-						// Broadcast RouteMsg
 						return m, func() tea.Msg {
 							return RouteMsg{SenderID: m.ID, Mention: mention, Prompt: prompt}
 						}
@@ -131,6 +130,16 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.AddMessage(fmt.Sprintf("You: %s", userInput))
 					m.textinput.SetValue("")
 					cmds = append(cmds, m.sendMessage(userInput))
+				}
+			
+			case "s": // Speak last response
+				if len(m.history) > 0 {
+					last := m.history[len(m.history)-1]
+					if strings.HasPrefix(last, "AI: ") {
+						text := strings.TrimPrefix(last, "AI: ")
+						m.speaking = true
+						cmds = append(cmds, m.speak(text))
+					}
 				}
 			}
 			m.textinput, cmd = m.textinput.Update(msg)
@@ -144,7 +153,6 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.AddMessage(fmt.Sprintf("AI: %s", msg.Response))
 			if len(msg.Sources) > 0 {
 				m.AddMessage("Sources:")
-				// Show top 3 sources
 				limit := len(msg.Sources)
 				if limit > 3 {
 					limit = 3
@@ -152,8 +160,6 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				for i := 0; i < limit; i++ {
 					s := msg.Sources[i]
 					m.AddMessage(fmt.Sprintf("  [%d] Doc: %s (Score: %.2f)", i+1, s.DocumentID, s.Score))
-					
-					// Rune-aware truncation for snippet
 					runes := []rune(s.Content)
 					snippet := string(runes)
 					if len(runes) > 100 {
@@ -165,10 +171,15 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	
 	case RouteMsg:
-		// Ignore self-mentions and only respond if we are the target
 		if msg.SenderID != m.ID && strings.EqualFold(m.ID, msg.Mention) {
 			m.AddMessage(fmt.Sprintf("Mentioned by %s: %s", msg.SenderID, msg.Prompt))
 			cmds = append(cmds, m.sendMessage(msg.Prompt))
+		}
+
+	case playbackFinishedMsg:
+		m.speaking = false
+		if msg.Error != nil {
+			m.AddMessage(fmt.Sprintf("Audio Error: %v", msg.Error))
 		}
 	}
 
@@ -183,11 +194,16 @@ func (m *ChatModel) View() tea.View {
 		return tea.NewView("Initializing...")
 	}
 
+	status := ""
+	if m.speaking {
+		status = " (Speaking...)"
+	}
+
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		m.viewport.View(),
 		"\n",
-		m.textinput.View(),
+		m.textinput.View()+status,
 	)
 	return tea.NewView(content)
 }
@@ -259,7 +275,7 @@ func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 		}
 		req.Header.Set("X-Charming-Key", apiKey)
 
-		client := &http.Client{Timeout: 35 * time.Second} // Slightly longer than gateway timeout
+		client := &http.Client{Timeout: 35 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
 			return chatResponseMsg{Error: err}
@@ -288,5 +304,47 @@ func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 			Usage:    result.Usage,
 			Sources:  result.Sources,
 		}
+	}
+}
+
+func (m *ChatModel) speak(text string) tea.Cmd {
+	return func() tea.Msg {
+		gatewayURL := os.Getenv("GATEWAY_URL")
+		if gatewayURL == "" {
+			gatewayURL = "http://localhost:8090/api/v1/speech"
+		} else {
+			u, _ := url.Parse(gatewayURL)
+			u.Path = "/api/v1/speech"
+			gatewayURL = u.String()
+		}
+
+		payload, _ := json.Marshal(map[string]string{"text": text})
+		req, _ := http.NewRequest("POST", gatewayURL, bytes.NewBuffer(payload))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Charming-Key", os.Getenv("GATEWAY_API_KEY"))
+
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return playbackFinishedMsg{Error: err}
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return playbackFinishedMsg{Error: fmt.Errorf("TTS server error: %d", resp.StatusCode)}
+		}
+
+		// Save temp audio and play
+		path := filepath.Join(os.TempDir(), "charmingman_speech.mp3")
+		f, _ := os.Create(path)
+		io.Copy(f, resp.Body)
+		f.Close()
+
+		// Use 'play' from sox (or 'afplay' on mac, or 'ffplay')
+		// For cross-platform we'll try a few or just stick to 'play' as we already documented sox.
+		cmd := exec.Command("play", path)
+		err = cmd.Run()
+		
+		return playbackFinishedMsg{Error: err}
 	}
 }

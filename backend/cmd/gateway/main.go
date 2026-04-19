@@ -3,17 +3,23 @@ package main
 import (
 	"context"
 	"database/sql"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"charmingman/backend/internal/db"
 	"charmingman/backend/internal/document"
 	"charmingman/backend/internal/handler"
+	"charmingman/backend/internal/mcp"
 	"charmingman/backend/internal/provider"
 	"charmingman/backend/internal/vector"
+	"github.com/charmbracelet/openai-go"
+	"github.com/charmbracelet/openai-go/option"
+	"github.com/charmbracelet/openai-go/packages/param"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
@@ -110,6 +116,31 @@ func main() {
 
 	ps := provider.NewProviderService(queries)
 	docService := document.NewDocumentService(queries, embedder, vStore, docRoot)
+
+	// Initialize MCP Servers
+	mcpServers := os.Getenv("MCP_SERVERS")
+	if mcpServers != "" {
+		for _, serverCmd := range strings.Split(mcpServers, ",") {
+			parts := strings.Fields(serverCmd)
+			if len(parts) == 0 {
+				continue
+			}
+			client, err := mcp.NewClient(parts[0], parts[1:]...)
+			if err != nil {
+				log.Printf("Failed to start MCP server %s: %v", parts[0], err)
+				continue
+			}
+			tools, err := client.ListTools(ctx)
+			if err != nil {
+				log.Printf("Failed to list tools for MCP server %s: %v", parts[0], err)
+				continue
+			}
+			for _, t := range tools {
+				ps.RegisterTool(mcp.NewMCPToolWrapper(client, t))
+				log.Printf("Registered MCP tool: %s", t.Name)
+			}
+		}
+	}
 
 	// Register providers from environment variables
 	if openaiKey != "" {
@@ -325,6 +356,53 @@ func main() {
 		if transcribeHandler != nil {
 			v1.POST("/transcribe", transcribeHandler.HandleTranscribe)
 		}
+
+		v1.POST("/speech", func(c *gin.Context) {
+			var req struct {
+				Text string `json:"text" binding:"required"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			if openaiKey == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "OpenAI API key not configured"})
+				return
+			}
+
+			client := openai.NewClient(option.WithAPIKey(openaiKey))
+			resp, err := client.Audio.Speech.New(ctx, openai.AudioSpeechNewParams{
+				Input: req.Text,
+				Model: openai.SpeechModelTTS1,
+				Voice: openai.AudioSpeechNewParamsVoiceUnion{
+					OfString: param.NewOpt("alloy"),
+				},
+				ResponseFormat: openai.AudioSpeechNewParamsResponseFormatMP3,
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			defer resp.Body.Close()
+
+			c.Header("Content-Type", "audio/mpeg")
+			io.Copy(c.Writer, resp.Body)
+		})
+
+		// Tooling Endpoints
+		v1.GET("/tools", func(c *gin.Context) {
+			tools := ps.ListTools()
+			var resp []map[string]interface{}
+			for _, t := range tools {
+				info := t.Info()
+				resp = append(resp, map[string]interface{}{
+					"name":        info.Name,
+					"description": info.Description,
+				})
+			}
+			c.JSON(http.StatusOK, resp)
+		})
 	}
 
 	port := os.Getenv("PORT")

@@ -307,6 +307,10 @@ func (m rootModel) initDashboardFromLayout() tea.Cmd {
 			doc := tui.NewDocumentModel(winCfg.Config.Content)
 			winModel = doc
 		
+		case "tool":
+			belt := tui.NewToolBeltModel()
+			winModel = belt
+		
 		case "voice":
 			voice := tui.NewVoiceInputModel()
 			winModel = voice
