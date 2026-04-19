@@ -148,7 +148,7 @@ func main() {
 	}
 
 	// Initialize Handlers
-	chatHandler := handler.NewChatHandler(ps, docService)
+	chatHandler := handler.NewChatHandler(ps, docService, queries)
 
 	// Setup Gin router
 	r := gin.Default()

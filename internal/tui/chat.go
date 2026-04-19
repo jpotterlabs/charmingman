@@ -29,7 +29,16 @@ type Source struct {
 	Score      float32 `json:"score"`
 }
 
+// RouteMsg is a message to be routed to a specific agent by name/mention.
+// It is broadcast to all windows; handlers should ignore messages from themselves.
+type RouteMsg struct {
+	SenderID string
+	Mention  string
+	Prompt   string
+}
+
 type ChatModel struct {
+	ID        string
 	viewport  viewport.Model
 	textinput textinput.Model
 	history   []string
@@ -39,17 +48,21 @@ type ChatModel struct {
 	Focused   bool
 
 	// Agent config
+	AgentID  string
 	Provider string
 	Model    string
 	APIKey   string
 	UseRAG   bool
+	RoomID   string
 }
 
-func NewChatModel() *ChatModel {
+func NewChatModel(id string) *ChatModel {
 	ti := textinput.New()
 	ti.Placeholder = "Send a message..."
 
 	return &ChatModel{
+		ID:        id,
+		AgentID:   id, // Initialize AgentID to match window ID by default
 		history:   make([]string, 0),
 		textinput: ti,
 	}
@@ -87,8 +100,34 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.Focused {
 			switch msg.String() {
 			case "enter":
-				userInput := m.textinput.Value()
+				userInput := strings.TrimSpace(m.textinput.Value())
 				if userInput != "" {
+					// Check for @mention
+					if strings.HasPrefix(userInput, "@") {
+						parts := strings.SplitN(userInput, " ", 2)
+						mention := strings.TrimPrefix(parts[0], "@")
+						prompt := ""
+						if len(parts) > 1 {
+							prompt = strings.TrimSpace(parts[1])
+						}
+						
+						// Guard against routing empty prompts
+						if prompt == "" {
+							m.AddMessage("System: Please provide a prompt after the mention.")
+							m.textinput.SetValue("")
+							return m, nil
+						}
+
+						// Echo to local chat
+						m.AddMessage(fmt.Sprintf("You (to @%s): %s", mention, prompt))
+						m.textinput.SetValue("")
+
+						// Broadcast RouteMsg
+						return m, func() tea.Msg {
+							return RouteMsg{SenderID: m.ID, Mention: mention, Prompt: prompt}
+						}
+					}
+
 					m.AddMessage(fmt.Sprintf("You: %s", userInput))
 					m.textinput.SetValue("")
 					cmds = append(cmds, m.sendMessage(userInput))
@@ -123,6 +162,13 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.AddMessage(fmt.Sprintf("      \"%s\"", snippet))
 				}
 			}
+		}
+	
+	case RouteMsg:
+		// Ignore self-mentions and only respond if we are the target
+		if msg.SenderID != m.ID && strings.EqualFold(m.ID, msg.Mention) {
+			m.AddMessage(fmt.Sprintf("Mentioned by %s: %s", msg.SenderID, msg.Prompt))
+			cmds = append(cmds, m.sendMessage(msg.Prompt))
 		}
 	}
 
@@ -168,7 +214,6 @@ func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 		if rawURL == "" {
 			finalURL = "http://localhost:8090/api/v1/chat"
 		} else {
-			// Ensure scheme exists
 			if !strings.Contains(rawURL, "://") {
 				rawURL = "http://" + rawURL
 			}
@@ -179,15 +224,11 @@ func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 			if u.Host == "" {
 				return chatResponseMsg{Error: fmt.Errorf("invalid GATEWAY_URL: missing host")}
 			}
-			
-			// Normalize path
 			if u.Path == "" || u.Path == "/" || u.Path == "/api/v1" {
 				u.Path = "/api/v1/chat"
 			} else if !strings.HasSuffix(u.Path, "/chat") && !strings.HasSuffix(u.Path, "/chat/") {
-				// If it's something like /v1, append /chat
 				u.Path = strings.TrimRight(u.Path, "/") + "/chat"
 			}
-			
 			finalURL = u.String()
 		}
 		
@@ -196,6 +237,8 @@ func (m *ChatModel) sendMessage(prompt string) tea.Cmd {
 			"model":    m.Model,
 			"prompt":   prompt,
 			"use_rag":  m.UseRAG,
+			"room_id":  m.RoomID,
+			"agent_id": m.AgentID,
 		}
 		
 		jsonData, err := json.Marshal(payload)

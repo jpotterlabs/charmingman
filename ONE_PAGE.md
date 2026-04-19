@@ -14,7 +14,7 @@ Include Whisper transcription hybrid (like all other services)
 Terminal TUI (Go, Bubble Tea + Bubbles + Lipgloss) as primary UI with a small web admin/portal for account/sync settings.
 Local agent manager + in‑process agent orchestration;
 LLM providers: local- ollama, vllm, llama.cpp; remote- openrouter, openai, anthropic
-Embeddings & vector DB: OpenAI text-embedding-3-small for embeddings + LanceDB for storage and ANN search — configured with OPENAI_API_KEY and local LanceDB path for lightweight, embedded vector search.
+Embeddings & vector DB: OpenAI text-embedding-3-small for embeddings + Pinecone for managed storage and ANN search — configured with OPENAI_API_KEY and PINECONE_API_KEY.
 Document ingestion: PDF & text upload, PDF text extraction, chunking, embedding, index/persist.
 Whisper transcription: local transcription servers (privacy) with cloud TTS (ElevenLabs) and Twilio for telephony optional.
 Agent & state: state machine for chatrooms & agents, structured message envelopes (metadata, tool calls, vector refs).
@@ -171,21 +171,20 @@ Sync semantics:
 ---
 
 ## Roadmap & near‑term milestones
-MVP (0–3 months)
+Phase 1 - 3: Completed ✅
 - TUI client with agent creation wizard, core chat, PDF upload & RAG using OpenAI embeddings + Pinecone, provider credential management, local SQLite persistence, OS keyring integration, worker pool.
-- Sync REST backend (basic delta sync), optional MCP server (relay only).
-- Minimal safe toolset and per-agent allowlist.
+- Initial Window Management ("The Stage") and draggable TUI components.
 
-Near term (3–6 months)
+Near term (Phase 4): 🚀
+- Multi-Agent Swarms & Tools: Agent-to-Agent communication.
+- MCP (Model Context Protocol) integration for local tool calling.
+- Thinking Drawer for visualizing reasoning chains.
+
+Mid term (Phase 5):
 - HF inference fallback integration.
 - Local‑fallback documentation and prototype for HNSW on-disk index.
 - Basic TTS (cloud) and Twilio outbound call integration (optional).
 - Conflict UI for agent & document merges.
-
-Mid term (6–12 months)
-- WASM plugin model for safe tool extensions.
-- Mobile/web ports (Flutter) or a web UI backed by the same backend APIs.
-- Enterprise features: team sync, audit logs, and compliance tooling.
 
 ---
 
@@ -200,10 +199,10 @@ Mid term (6–12 months)
 - Distribution: Hybrid — local‑first client with optional cloud backend for sync/managed services.
 - Primary UI for MVP: Terminal TUI in Go (Bubble Tea) + small web admin portal.
 - LLMs: OpenAI + Hugging Face Inference (HF) as fallback.
-- Embeddings & vector DB: OpenAI embeddings + Pinecone (managed) by default; local HNSW fallback documented.
+- Embeddings & vector DB: OpenAI embeddings + Pinecone (managed) by default.
 - Transcription/TTS/telephony: Hybrid — local transcription (self‑run servers) + cloud TTS (ElevenLabs) and Twilio for telephony (deferred).
 - Secrets: OS keyring; encrypted fallback.
-- Persistence: SQLite local DB (SQLDelight recommended) + artifacts folder.
+- Persistence: SQLite local DB + artifacts folder.
 - Concurrency: pre‑fork worker pool (1 per CPU core, min 2, cap 16), queue 500.
 - Telemetry: opt‑in only, anonymized, 90‑day retention.
 - License: MIT.

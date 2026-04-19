@@ -1,23 +1,38 @@
-name: "Default Workspace"
+# CharmingMan Layout Configuration
+# Supports 'floating' (absolute x,y) and 'tiled' (relative) windows.
+
 windows:
-  - id: "chat1"
-    title: "GPT-4"
-    component: "chat"
+  - id: "primary-chat"
+    title: "Main Assistant"
+    type: "chat"
     x: 2
-    y: 2
-    width: 50
-    height: 15
-  - id: "chat2"
-    title: "Claude"
-    component: "chat"
-    x: 55
-    y: 2
-    width: 50
-    height: 15
-  - id: "thinklog"
-    title: "Thinking Log"
-    component: "log"
+    y: 1
+    width: 60
+    height: 25
+    focused: true
+    config:
+      provider: "openai"
+      model: "gpt-4o"
+      use_rag: true
+
+  - id: "stage"
+    title: "The Stage"
+    type: "document"
+    x: 65
+    y: 1
+    width: 80
+    height: 30
+    config:
+      content: "# System Ready\n\nInfinity Canvas initialized."
+
+  - id: "think-log"
+    title: "Reasoning Trace"
+    type: "chat"
     x: 2
-    y: 18
-    width: 103
+    y: 28
+    width: 60
     height: 10
+    config:
+      provider: "ollama"
+      model: "llama3"
+      persona: "You are a reasoning tracer. Summarize the logic of other agents."

@@ -8,7 +8,7 @@ import (
 )
 
 type Agent struct {
-	fantasyAgent *fantasy.Agent
+	fantasyAgent fantasy.Agent
 }
 
 func NewAgent(apiKey string, modelName string) (*Agent, error) {

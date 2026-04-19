@@ -30,7 +30,7 @@ func NewDocumentService(queries *db.Queries, embedder vector.Embedder, vectorSto
 }
 
 func (s *DocumentService) AddDocument(ctx context.Context, title string, path string) (string, error) {
-	// 1. Sanitize and validate path
+	// 1. Sanitize and validate path (platform-safe)
 	cleanPath := filepath.Clean(path)
 	
 	absRoot, err := filepath.Abs(s.documentsRoot)
@@ -49,7 +49,7 @@ func (s *DocumentService) AddDocument(ctx context.Context, title string, path st
 		return "", fmt.Errorf("path escapes documents root: %s", path)
 	}
 
-	// 2. Enforce per-file extraction limit (e.g. 10MB)
+	// 2. Enforce per-file extraction limit (10MB)
 	fileInfo, err := os.Stat(absPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to stat file: %w", err)

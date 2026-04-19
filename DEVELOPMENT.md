@@ -8,29 +8,52 @@ The CharmingMan project consists of a unified AI Gateway (backend) and a multi-a
     - Unified API access via `/api/v1/chat`.
     - Support for OpenAI, Anthropic, Ollama, and llama.cpp.
     - Security middleware for `X-Charming-Key` validation.
-    - 30-second request timeouts for reliability.
+    - **RAG Implementation**: Intelligent retrieval from uploaded documents.
 - **Chat TUI**:
     - **Wizard State**: Guided agent configuration using the `huh` library.
     - **Dashboard State**: Multi-window management system.
-    - **Window Management**: Support for dragging (mouse) and cycling focus (`Tab`).
-    - **Mock Chat**: Initialized viewports for chat history display.
+    - **Window Management**: Draggable windows (mouse support) and focus cycling (`Tab`).
+    - **"The Stage"**: A dedicated window for document preview and RAG source inspection.
 
-## 2. Setup and Launch
+## 2. Phase 3: Intelligence & Knowledge (RAG)
+
+Phase 3 focused on grounding agents with your own documents. This involved a significant backend expansion and new TUI components.
+
+### 🧩 RAG Pipeline Components
+1. **Document Extractor**: Supports `.txt`, `.md`, and `.pdf` files. PDF extraction is powered by `github.com/ledongthuc/pdf`.
+2. **Chunker**: Splits large documents into smaller pieces (1000 characters) with a 200-character overlap for context continuity.
+3. **Embedder**: Generates vector embeddings for each chunk (currently using `OpenAI text-embedding-3-small`).
+4. **Vector Store**:
+    - **LocalStore**: In-memory storage for development.
+    - **PineconeStore**: Production-grade managed vector database.
+
+### 📦 New Dependencies
+- `github.com/pinecone-io/go-pinecone`: Go SDK for Pinecone.
+- `github.com/ledongthuc/pdf`: Native Go PDF parser for text extraction.
+- `github.com/gin-gonic/gin`: HTTP web framework for the AI Gateway.
+- `github.com/google/uuid`: Used for document and chunk identification.
+
+## 3. Setup and Launch
 
 ### Prerequisites:
 - Go 1.26 or higher.
 - A running instance of Ollama or llama.cpp (for local model support).
 
-### Backend Configuration:
+### Configuration:
 1. Navigate to the `backend/` directory.
 2. Create or edit the `.env` file:
    ```env
    PORT=8090
    GATEWAY_API_KEY=your-secret-key-here
-   OPENAI_API_KEY=sk-...
+   OPENAI_API_KEY=sk-... # REQUIRED for embeddings
    ANTHROPIC_API_KEY=ant-...
-   OLLAMA_BASE_URL=http://localhost:11434/v1
-   LLAMACPP_BASE_URL=http://localhost:8081/v1
+   
+   # Pinecone Configuration (Optional, defaults to LocalStore if missing)
+   PINECONE_API_KEY=your-pinecone-key
+   PINECONE_INDEX=your-index-name
+   
+   # Document Storage
+   DOCUMENTS_ROOT=./documents
    ```
 
 ### Running the Project:
@@ -44,41 +67,55 @@ The CharmingMan project consists of a unified AI Gateway (backend) and a multi-a
   go run main.go
   ```
 
-## 3. Manual Testing
+## 4. Manual Testing
 
 ### Testing the API (Backend):
 All requests must include the `X-Charming-Key` header.
 ```bash
+# Upload a document
+curl -X POST http://localhost:8090/api/v1/documents \
+  -H "Content-Type: application/json" \
+  -H "X-Charming-Key: your-secret-key-here" \
+  -d '{
+    "title": "My Knowledge",
+    "path": "path/to/my/document.pdf"
+  }'
+
+# Chat with RAG
 curl -X POST http://localhost:8090/api/v1/chat \
   -H "Content-Type: application/json" \
   -H "X-Charming-Key: your-secret-key-here" \
   -d '{
     "provider": "openai",
     "model": "gpt-4o",
-    "prompt": "Hello!"
+    "prompt": "What does my knowledge say about X?",
+    "use_rag": true
   }'
 ```
 
 ### Testing the TUI (Frontend):
-1. **Wizard Flow**: Run `go run main.go`. Fill out the "Agent Name", "Model", "Persona", and "API Key". Navigate using arrow keys and Enter.
-2. **Dashboard**: Once the wizard completes, you enter the dashboard.
-    - **Focus**: Press `Tab` to cycle focus between windows (if multiple exist).
-    - **Mouse**: You can drag windows by their borders or titles (if implemented in `manager.go`).
-    - **Exit**: Press `q` or `Ctrl+C` to quit.
-3. **Current Limitations**: The TUI does not yet send real requests to the backend gateway. Chat interactions are currently mock-only.
+1. **Wizard Flow**: Run `go run main.go`. Fill out the "Agent Name", "Model", etc.
+2. **Dashboard**:
+    - **RAG Support**: Toggle `Use RAG` in the wizard.
+    - **"The Stage"**: Inspect the "The Stage" window to see the initial knowledge base message.
+    - **Window Management**: Click and drag window title bars or borders to move/resize windows. Press `Tab` to cycle focus.
 
-## 4. Developer Diary & Technical Notes
+## 5. Developer Diary & Technical Notes
 
 ### Backend Decisions:
-- **Unified Adapter Strategy**: Used the `fantasy` library to abstract provider differences.
-- **Timeout Management**: Implemented a mandatory 30s timeout in `ProviderService.Chat`.
-- **Hardened Auth**: Refactored middleware to ensure strict `X-Charming-Key` validation.
-- **Error Mapping**: Mapped "provider not registered" errors to `400 Bad Request` for better API usability.
+- **Transactional Ingestion**: Implemented compensation logic in `DocumentService.AddDocument` to ensure clean rollbacks (deleting vectors/DB records) if ingestion fails halfway.
+- **Provider Abstraction**: Extended the provider system to support a unified `VectorStore` interface, allowing easy switching between local in-memory and cloud-based stores.
 
 ### Frontend (TUI) Decisions:
-- **State Machine**: The root model manages a simple state machine (`stateWizard` -> `stateDashboard`).
-- **Composition**: The `Manager` model manages multiple `Window` models, which in turn wrap content models like `ChatModel`.
-- **Event Forwarding**: The TUI uses a standard Bubble Tea MVU pattern, where the root model delegates `Update` calls to the active sub-model.
+- **Window Manager**: Introduced a new `Manager` model in `internal/tui` to handle the complexity of multiple, overlapping windows.
+- **Mouse Integration**: Built custom drag/resize logic into the `Manager` to make the TUI feel like a modern workspace while staying terminal-native.
+- **Document Model**: Created a `DocumentModel` wrapped in a `Window` (conceptualized as "The Stage") to display long-form content separate from chat history.
+
+## 6. Next Steps (Roadmap)
+- **Phase 4: Multi-Agent Swarms & Tools**:
+    - Implement the Model Context Protocol (MCP) for local tool calling.
+    - Enable agents to communicate with each other (Agent-to-Agent).
+    - Add a "Thinking" drawer to visualize agent reasoning chains.
 
 ---
 *Note: This documentation is updated as of April 2026.*
