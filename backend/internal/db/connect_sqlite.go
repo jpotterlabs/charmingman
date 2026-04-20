@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ncruces/go-sqlite3"
+	_ "github.com/ncruces/go-sqlite3/embed" // Import to embed the SQLite WASM binary
 	"github.com/ncruces/go-sqlite3/driver"
 )
 
